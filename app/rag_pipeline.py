@@ -47,7 +47,8 @@ class RAGPipeline:
             print(f"✗ Failed to ingest knowledge base: {e}")
             raise
     
-    def retrieve_context(self, query: str, top_k: int = 5) -> List[Dict]:
+    def retrieve_context(self, query: str, top_k: int = 5, probes: int = 10) -> List[Dict]:
+        self.vector_db.set_search_parameters(probes=probes)
         """Retrieve relevant context for a query"""
         # Generate query embedding
         query_embedding = self.embedding_model.embed_text(query)

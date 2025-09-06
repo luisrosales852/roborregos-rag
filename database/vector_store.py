@@ -15,6 +15,16 @@ class VectorStore:
         self.setup_vector_extension()
         self.create_tables()
     
+    def set_search_parameters(self, probes: int = 10):
+        """Configure IVFFlat search parameters for accuracy vs speed tradeoff"""
+        try:
+            # Set number of lists to search (default is 1, higher = more accurate but slower)
+            self.cursor.execute(f"SET ivfflat.probes = {probes};")
+            print(f"✓ Set IVFFlat probes to {probes}")
+        except Exception as e:
+            print(f"✗ Failed to set search parameters: {e}")
+            raise
+
     def connect(self):
         """Establish connection to PostgreSQL database"""
         try:
@@ -55,14 +65,17 @@ class VectorStore:
                 );
             """)
             
+            #Aver si lo uso realmente
             # Create index for vector similarity search
             self.cursor.execute("""
                 CREATE INDEX IF NOT EXISTS documents_embedding_idx 
                 ON documents USING ivfflat (embedding vector_cosine_ops)
                 WITH (lists = 100);
             """)
-            
+            self.cursor.execute("ANALYZE documents;")
+
             self.conn.commit()
+            
             print("✓ Database tables created")
         except Exception as e:
             print(f"✗ Failed to create tables: {e}")
@@ -86,10 +99,28 @@ class VectorStore:
             print(f"✗ Failed to insert document: {e}")
             raise
     
-    def search_similar(self, query_embedding: List[float], top_k: int = 5) -> List[Dict]:
+
+    
+    def search_similar(self, query_embedding: List[float], top_k: int = 5, explain: bool = False) -> List[Dict]:
         """Search for similar documents using cosine similarity"""
         try:
             embedding_str = '[' + ','.join(map(str, query_embedding)) + ']'
+            if explain:
+                self.cursor.execute("""
+                    EXPLAIN (ANALYZE, BUFFERS)
+                    SELECT id, content, metadata,
+                        1 - (embedding <=> %s::vector) AS similarity
+                FROM documents
+                ORDER BY embedding <=> %s::vector
+                LIMIT %s;
+            """, (embedding_str, embedding_str, top_k))
+            
+                plan = self.cursor.fetchall()
+                print("\n📊 Query Execution Plan:")
+                for row in plan:
+                    print(row)
+                print()
+            
             self.cursor.execute("""
                 SELECT id, content, metadata,
                        1 - (embedding <=> %s::vector) AS similarity
@@ -122,3 +153,29 @@ class VectorStore:
         if self.conn:
             self.conn.close()
 
+    def compare_index_performance(self):
+        """Compare search with and without index"""
+    
+        # Force sequential scan (no index)
+        self.cursor.execute("SET enable_indexscan = OFF;")
+        start_time = time.time()
+        self.cursor.execute("""
+            SELECT * FROM documents 
+            ORDER BY embedding <=> %s::vector 
+            LIMIT 5
+        """, [query_embedding])
+        no_index_time = time.time() - start_time
+    
+        # Re-enable index scan
+        self.cursor.execute("SET enable_indexscan = ON;")
+        start_time = time.time()
+        self.cursor.execute("""
+            SELECT * FROM documents 
+            ORDER BY embedding <=> %s::vector 
+            LIMIT 5
+        """, [query_embedding])
+        with_index_time = time.time() - start_time
+    
+        print(f"Without index: {no_index_time:.3f}s")
+        print(f"With IVFFlat: {with_index_time:.3f}s")
+        print(f"Speedup: {no_index_time/with_index_time:.1f}x")
