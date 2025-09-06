@@ -1,4 +1,4 @@
-
+import time
 
 class RAGPipeline:
     """Main RAG Pipeline orchestrator"""
@@ -68,7 +68,6 @@ class RAGPipeline:
         
         # System prompt for RAG
         system_prompt = """You are a helpful AI assistant that answers questions based on the provided context.
-        
 Instructions:
 - Answer the question using ONLY the information provided in the context
 - If the context doesn't contain enough information to answer the question, say so
@@ -154,3 +153,49 @@ Answer:"""
                 break
             except Exception as e:
                 print(f"\n❌ Error: {e}")
+
+    def compare_index_performance(self, query_text: str):
+        """Compare search performance with and without index"""
+    
+        # First generate the query embedding
+        query_embedding = self.embedding_model.embed_text(query_text)
+        embedding_str = '[' + ','.join(map(str, query_embedding)) + ']'
+    
+        # Force sequential scan (no index)
+        self.cursor.execute("SET enable_indexscan = OFF;")
+        start_time = time.time()
+        self.cursor.execute("""
+            SELECT id, content, 
+                1 - (embedding <=> %s::vector) AS similarity
+            FROM documents 
+            ORDER BY embedding <=> %s::vector 
+            LIMIT 5
+        """, (embedding_str, embedding_str))
+        results_no_index = self.cursor.fetchall()
+        no_index_time = time.time() - start_time
+    
+        # Re-enable index scan
+        self.cursor.execute("SET enable_indexscan = ON;")
+    
+        # Test with different probe settings
+        probe_settings = [1, 10, 50]
+        for probes in probe_settings:
+            self.cursor.execute(f"SET ivfflat.probes = {probes};")
+        
+            start_time = time.time()
+            self.cursor.execute("""
+                SELECT id, content, 
+                    1 - (embedding <=> %s::vector) AS similarity
+                FROM documents 
+                ORDER BY embedding <=> %s::vector 
+                LIMIT 5
+            """, (embedding_str, embedding_str))
+            results_with_index = self.cursor.fetchall()
+            with_index_time = time.time() - start_time
+        
+            print(f"\n🔍 Probes = {probes}:")
+            print(f"  Time: {with_index_time:.3f}s")
+            print(f"  Speedup vs no index: {no_index_time/with_index_time:.1f}x")
+    
+        print(f"\n📊 Baseline (no index): {no_index_time:.3f}s")
+    
