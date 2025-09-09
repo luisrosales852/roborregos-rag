@@ -5,7 +5,7 @@ import os
 class EmbeddingModel:
     """OpenAI Embedding Model wrapper"""
     
-    def __init__(self, api_key: Optional[str] = None, model: str = "text-embedding-ada-002"):
+    def __init__(self, api_key: Optional[str] = None, model: str = "text-embedding-3-large"):
         self.client = OpenAI(api_key=api_key or os.getenv("OPENAI_API_KEY"))
         self.model = model
     

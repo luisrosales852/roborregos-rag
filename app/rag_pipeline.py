@@ -1,12 +1,19 @@
+import time
+from ..database.vector_store import VectorStore
+from .embedding_model import EmbeddingModel
+from dotenv import load_dotenv
+import os
+from openai import OpenAI
 
+load_dotenv()
 
 class RAGPipeline:
     """Main RAG Pipeline orchestrator"""
     
     def __init__(self, db_config: Dict[str, str], openai_api_key: Optional[str] = None):
-        self.vector_db = PostgresVectorDB(db_config)
+        self.vector_db = VectorStore(db_config)
         self.embedding_model = EmbeddingModel(api_key=openai_api_key)
-        self.client = OpenAI(api_key=openai_api_key or os.getenv("OPENAI_API_KEY"))
+        self.client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
         self.chunk_strategy = ChunkingStrategy()
         self.chat_model = "gpt-3.5-turbo"  # Can be changed to gpt-4
     
@@ -47,7 +54,8 @@ class RAGPipeline:
             print(f"✗ Failed to ingest knowledge base: {e}")
             raise
     
-    def retrieve_context(self, query: str, top_k: int = 5) -> List[Dict]:
+    def retrieve_context(self, query: str, top_k: int = 5, probes: int = 10) -> List[Dict]:
+        self.vector_db.set_search_parameters(probes=probes)
         """Retrieve relevant context for a query"""
         # Generate query embedding
         query_embedding = self.embedding_model.embed_text(query)
@@ -67,7 +75,6 @@ class RAGPipeline:
         
         # System prompt for RAG
         system_prompt = """You are a helpful AI assistant that answers questions based on the provided context.
-        
 Instructions:
 - Answer the question using ONLY the information provided in the context
 - If the context doesn't contain enough information to answer the question, say so
@@ -76,12 +83,10 @@ Instructions:
 - Do not make up information not present in the context"""
         
         # User prompt
-        user_prompt = f"""Context:
-{context_text}
+        user_prompt = f"""Context: {context_text}
+        Question: {query}
 
-Question: {query}
-
-Answer:"""
+        Answer:"""
         
         try:
             response = self.client.chat.completions.create(
@@ -153,3 +158,49 @@ Answer:"""
                 break
             except Exception as e:
                 print(f"\n❌ Error: {e}")
+
+    def compare_index_performance(self, query_text: str):
+        """Compare search performance with and without index"""
+    
+        # First generate the query embedding
+        query_embedding = self.embedding_model.embed_text(query_text)
+        embedding_str = '[' + ','.join(map(str, query_embedding)) + ']'
+    
+        # Force sequential scan (no index)
+        self.cursor.execute("SET enable_indexscan = OFF;")
+        start_time = time.time()
+        self.cursor.execute("""
+            SELECT id, content, 
+                1 - (embedding <=> %s::vector) AS similarity
+            FROM documents 
+            ORDER BY embedding <=> %s::vector 
+            LIMIT 5
+        """, (embedding_str, embedding_str))
+        results_no_index = self.cursor.fetchall()
+        no_index_time = time.time() - start_time
+    
+        # Re-enable index scan
+        self.cursor.execute("SET enable_indexscan = ON;")
+    
+        # Test with different probe settings
+        probe_settings = [1, 10, 50]
+        for probes in probe_settings:
+            self.cursor.execute(f"SET ivfflat.probes = {probes};")
+        
+            start_time = time.time()
+            self.cursor.execute("""
+                SELECT id, content, 
+                    1 - (embedding <=> %s::vector) AS similarity
+                FROM documents 
+                ORDER BY embedding <=> %s::vector 
+                LIMIT 5
+            """, (embedding_str, embedding_str))
+            results_with_index = self.cursor.fetchall()
+            with_index_time = time.time() - start_time
+        
+            print(f"\n🔍 Probes = {probes}:")
+            print(f"  Time: {with_index_time:.3f}s")
+            print(f"  Speedup vs no index: {no_index_time/with_index_time:.1f}x")
+    
+        print(f"\n📊 Baseline (no index): {no_index_time:.3f}s")
+    
