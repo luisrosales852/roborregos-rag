@@ -111,6 +111,7 @@ class VectorStore:
             
             if existing_index:
                 print("Trying to use manage_vector_index")
+                
                 # Extract current cluster count from index definition
                 index_def = existing_index['indexdef']
                 if f"lists = {optimal_clusters}" not in index_def:

@@ -7,6 +7,8 @@ class Indexing:
     @staticmethod
     def chunk_by_tokens(text: str, max_tokens: int = 512, overlap_tokens: int = 50) -> List[str]:
         """Chunk text by token count with overlap"""
+
+        
         encoding = tiktoken.get_encoding("cl100k_base")
         tokens = encoding.encode(text)
         

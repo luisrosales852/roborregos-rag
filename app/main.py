@@ -1,3 +1,5 @@
+from .rag_pipeline import RAGPipeline
+
 def main():
     db_config = {
         'host': 'localhost',

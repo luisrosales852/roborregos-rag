@@ -1,12 +1,19 @@
 import time
+from ..database.vector_store import VectorStore
+from .embedding_model import EmbeddingModel
+from dotenv import load_dotenv
+import os
+from openai import OpenAI
+
+load_dotenv()
 
 class RAGPipeline:
     """Main RAG Pipeline orchestrator"""
     
     def __init__(self, db_config: Dict[str, str], openai_api_key: Optional[str] = None):
-        self.vector_db = PostgresVectorDB(db_config)
+        self.vector_db = VectorStore(db_config)
         self.embedding_model = EmbeddingModel(api_key=openai_api_key)
-        self.client = OpenAI(api_key=openai_api_key or os.getenv("OPENAI_API_KEY"))
+        self.client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
         self.chunk_strategy = ChunkingStrategy()
         self.chat_model = "gpt-3.5-turbo"  # Can be changed to gpt-4
     
@@ -76,12 +83,10 @@ Instructions:
 - Do not make up information not present in the context"""
         
         # User prompt
-        user_prompt = f"""Context:
-{context_text}
+        user_prompt = f"""Context: {context_text}
+        Question: {query}
 
-Question: {query}
-
-Answer:"""
+        Answer:"""
         
         try:
             response = self.client.chat.completions.create(
