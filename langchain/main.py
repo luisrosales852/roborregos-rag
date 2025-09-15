@@ -4,7 +4,6 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
-
 import bs4
 from langchain import hub
 from langchain.text_splitter import RecursiveCharacterTextSplitter
@@ -15,9 +14,6 @@ from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from langchain_community.vectorstores.pgvector import PGVector
 
 
-#### INDEXING ####
-
-# Load Documents Prueba
 loader = WebBaseLoader(
     web_paths=("https://lilianweng.github.io/posts/2023-06-23-agent/",),
     bs_kwargs=dict(
@@ -47,9 +43,7 @@ vectorstore = PGVector.from_documents(
 
 retriever = vectorstore.as_retriever()
 
-#### RETRIEVAL and GENERATION ####
 
-# Prompt
 prompt = hub.pull("rlm/rag-prompt")
 
 # LLM
@@ -71,10 +65,4 @@ rag_chain = (
 answer = rag_chain.invoke("What is Task Decomposition?")
 print(answer)
 
-
-#Continuing so rag2
-
-# Documents
-question = "What kinds of pets do I like?"
-document = "My favorite pet is a cat."
 
