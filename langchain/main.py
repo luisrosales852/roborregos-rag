@@ -4,45 +4,43 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
-import bs4
+
 from langchain import hub
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain_community.document_loaders import WebBaseLoader
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.runnables import RunnablePassthrough
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
-from langchain_community.vectorstores.pgvector import PGVector
+from langchain_chroma import Chroma
+from langchain_community.document_loaders import PyPDFLoader
+from langchain_text_splitters import CharacterTextSplitter
 
 
-loader = WebBaseLoader(
-    web_paths=("https://lilianweng.github.io/posts/2023-06-23-agent/",),
-    bs_kwargs=dict(
-        parse_only=bs4.SoupStrainer(
-            class_=("post-content", "post-title", "post-header")
-        )
-    ),
-)
+script_dir = os.path.dirname(os.path.abspath(__file__))
+pdf1_path = os.path.join(script_dir, "knowledge1.pdf")
+
+print("Script directory:", script_dir)
+loader = PyPDFLoader(pdf1_path)
 docs = loader.load()
 
+all_page_content = [doc.page_content for doc in docs]
 
-# Split
-text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
-splits = text_splitter.split_documents(docs)
+embeddings_openai = OpenAIEmbeddings(model="text-embedding-3-large")
 
-# Embed
-embeddings = OpenAIEmbeddings()
-connection_string = os.getenv("POSGRESS_URL")
-collection_name = "agents_blog_rag"
+# Split first document
+text_splitter = RecursiveCharacterTextSplitter(chunk_size=400, chunk_overlap=50)
+splits = text_splitter.create_documents(all_page_content)
+print(f"Document1 split into {len(splits)} chunks.")
 
-vectorstore = PGVector.from_documents(
-    documents=splits,
-    embedding=embeddings,
-    collection_name=collection_name,
-    connection_string=connection_string,
-)
+#Vector Store. For now just put them into one vector store, then work on indexing if needed.
+print("Trying to use chroma vector store")
+print(f"{splits[0]}")
+vectorstore1 = Chroma(collection_name="knowledge1_collection",embedding_function=embeddings_openai, persist_directory="/chroma_knowledge1_db")
+vectorstore1.add_documents(splits)
 
-retriever = vectorstore.as_retriever()
-
+              
+print("Embedded vectors.")
+print("Total Vectors:", vectorstore1._collection.count())
+retriever = vectorstore1.as_retriever()
 
 prompt = hub.pull("rlm/rag-prompt")
 
