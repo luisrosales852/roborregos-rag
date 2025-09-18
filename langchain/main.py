@@ -4,12 +4,11 @@ from uuid import uuid4
 
 load_dotenv()
 
-
 import re
 from langchain import hub
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_core.output_parsers import StrOutputParser
-from langchain_core.runnables import RunnablePassthrough
+from langchain_core.runnables import RunnablePassthrough, RunnableLambda
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from langchain_chroma import Chroma
 from langchain_community.document_loaders import PyPDFLoader
@@ -18,6 +17,7 @@ from langchain_core.documents import Document
 from langchain.prompts import ChatPromptTemplate
 from langchain.load import dumps, loads
 from operator import itemgetter
+from langchain_community.retrievers import BM25Retriever
 
 def clean_pdf_text(text):
     # Replace multiple whitespace characters (spaces, tabs, newlines) with single space
@@ -78,7 +78,39 @@ retriever = vectorstore1.as_retriever(search_kwargs={"k": 3})
 
 question = input("Whats your question?: ")
 
-# Multi Query: Different Perspectives
+
+
+
+
+# Implementando BM25 a mi modelo. Aver si era esto. Viva langchain. 
+#Voy a perform BM25 en la pregunta inicial, no en las consiguientes 3 gracias a step back prompting aunque primero si la transformaria.
+
+template_bm25 = """Eres un experto en optimización de consultas para búsqueda BM25. Tu tarea es reescribir la pregunta del usuario para maximizar la efectividad de la búsqueda por palabras clave.
+
+Instrucciones para reescribir:
+- Elimina palabras de pregunta (qué, cómo, por qué, cuándo, dónde)
+- Elimina artículos, preposiciones y conectores innecesarios
+- Convierte verbos a sustantivos cuando sea posible
+- Mantén nombres propios, términos técnicos y conceptos específicos
+- Usa sinónimos adicionales si pueden ayudar a encontrar más documentos relevantes
+- Estructura como una lista de términos clave separados por espacios
+- Máximo 8-10 palabras en la consulta reescrita
+
+Pregunta original: {question}
+
+Consulta optimizada para BM25:"""
+prompt_bm25 = ChatPromptTemplate.from_template(template_bm25)
+generate_bm25_query = prompt_bm25 | ChatOpenAI(temperature=0) | StrOutputParser()
+bm25_query = generate_bm25_query.invoke({"question": question})
+print("BM25 Optimized Query:", bm25_query)
+bm25_retriever = BM25Retriever.from_documents(splits, k=3)
+results_bm25 = bm25_retriever.invoke(bm25_query)
+print("BM25 Results:", results_bm25)
+
+
+
+
+# Step Back Prompting
 template = """Eres un asistente de modelo de lenguaje de IA. Tu tarea es generar 3 
 versiones diferentes de la pregunta del usuario para recuperar documentos relevantes de una base 
 de datos vectorial. Al generar múltiples perspectivas sobre la pregunta del usuario, tu objetivo es ayudar
@@ -124,22 +156,38 @@ prompt = ChatPromptTemplate.from_template(template)
 # LLM
 llm = ChatOpenAI(model_name="gpt-3.5-turbo", temperature=0)
 
+def debug_formatted_prompt(formatted_prompt):
+    print("Prompt")
+    print(formatted_prompt.messages[0].content)  # For ChatPromptTemplate messages
+    print("===============================")
+    return formatted_prompt
 
+def format_docs(docs):
+    return "\n\n".join([doc.page_content for doc in docs])
+
+def hybrid_retrieval(query_input):
+    question = query_input["question"]
+    
+    # Get BM25 results (you already have this)
+    bm25_query = generate_bm25_query.invoke({"question": question})
+    bm25_docs = bm25_retriever.invoke(bm25_query)
+    
+    # Get vector search results
+    vector_docs = retrieval_chain.invoke(query_input)
+    
+    # Combine both sets of documents
+    combined_docs = [bm25_docs, vector_docs]
+    
+    # Use your existing function to get unique documents
+    return get_unique_union(combined_docs)
 
 final_rag_chain = (
-    {"context": retrieval_chain, 
-     "question": itemgetter("question")} 
+    {"context": hybrid_retrieval | RunnableLambda(format_docs), 
+     "question": itemgetter("question")}
     | prompt
+    | RunnableLambda(debug_formatted_prompt)
     | llm
     | StrOutputParser()
 )
-
-final_inputs = {
-    "context": [doc.page_content for doc in retrieval_chain.invoke({"question": question})],
-    "question": question
-}
-
-print("Final inputs:", final_inputs)
-
 answer = final_rag_chain.invoke({"question":question})
 print(answer)
