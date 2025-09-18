@@ -15,8 +15,9 @@ from langchain_chroma import Chroma
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_text_splitters import CharacterTextSplitter
 from langchain_core.documents import Document
-
-
+from langchain.prompts import ChatPromptTemplate
+from langchain.load import dumps, loads
+from operator import itemgetter
 
 def clean_pdf_text(text):
     # Replace multiple whitespace characters (spaces, tabs, newlines) with single space
@@ -63,111 +64,82 @@ splits = clean_document_list(splits)
 print(splits[0])
 print(f"Document1 split into {len(splits)} chunks.")
 
-print("Trying to use chroma vector store")
 uuids = [str(uuid4()) for _ in range(len(splits))]
-
-document_1 = Document(
-    page_content="I had chocolate chip pancakes and scrambled eggs for breakfast this morning.",
-    metadata={"source": "tweet"},
-    id=1,
-)
-
-document_2 = Document(
-    page_content="The weather forecast for tomorrow is cloudy and overcast, with a high of 62 degrees.",
-    metadata={"source": "news"},
-    id=2,
-)
-
-document_3 = Document(
-    page_content="Building an exciting new project with LangChain - come check it out!",
-    metadata={"source": "tweet"},
-    id=3,
-)
-
-document_4 = Document(
-    page_content="Robbers broke into the city bank and stole $1 million in cash.",
-    metadata={"source": "news"},
-    id=4,
-)
-
-document_5 = Document(
-    page_content="Wow! That was an amazing movie. I can't wait to see it again.",
-    metadata={"source": "tweet"},
-    id=5,
-)
-
-document_6 = Document(
-    page_content="Is the new iPhone worth the price? Read this review to find out.",
-    metadata={"source": "website"},
-    id=6,
-)
-
-document_7 = Document(
-    page_content="The top 10 soccer players in the world right now.",
-    metadata={"source": "website"},
-    id=7,
-)
-
-document_8 = Document(
-    page_content="LangGraph is the best framework for building stateful, agentic applications!",
-    metadata={"source": "tweet"},
-    id=8,
-)
-
-document_9 = Document(
-    page_content="The stock market is down 500 points today due to fears of a recession.",
-    metadata={"source": "news"},
-    id=9,
-)
-
-document_10 = Document(
-    page_content="I have a bad feeling I am going to get deleted :(",
-    metadata={"source": "tweet"},
-    id=10,
-)
-
-document_list = [
-    document_1,
-    document_2,
-    document_3,
-    document_4,
-    document_5,
-    document_6,
-    document_7,
-    document_8,
-    document_9,
-    document_10,
-]
+existing_vectorstore = os.path.exists("./chroma_knowledge1_db")
 
 vectorstore1 = Chroma(collection_name="knowledge1_collection",embedding_function=embeddings_openai, persist_directory="./chroma_knowledge1_db")
-print("Created vectorstore")
 
-if(os.path.exists("./chroma_knowledge1_db") == False):
-    vectorstore1.add_documents(documents=document_list, ids=uuids)
+if(existing_vectorstore == False):
+    vectorstore1.add_documents(documents=splits, ids=uuids)
     print("Added documents to vectorstore")
 
 
-print("Loaing existing collection")
-print("Total Vectors:", vectorstore1._collection.count())
 retriever = vectorstore1.as_retriever(search_kwargs={"k": 3})
 
-prompt = hub.pull("rlm/rag-prompt")
+question = input("Whats your question?: ")
+
+# Multi Query: Different Perspectives
+template = """Eres un asistente de modelo de lenguaje de IA. Tu tarea es generar 3 
+versiones diferentes de la pregunta del usuario para recuperar documentos relevantes de una base 
+de datos vectorial. Al generar múltiples perspectivas sobre la pregunta del usuario, tu objetivo es ayudar
+al usuario a superar algunas de las limitaciones de la búsqueda por similitud basada en distancia.
+Proporciona estas preguntas alternativas separadas por saltos de línea. Pregunta original: {question}"""
+prompt_perspectives = ChatPromptTemplate.from_template(template)
+
+generate_queries = (
+    prompt_perspectives 
+    | ChatOpenAI(temperature=0) 
+    | StrOutputParser() 
+    | (lambda x: x.split("\n"))
+)
+
+def get_unique_union(documents: list[list]):
+    """ Unique union of retrieved docs """
+    # Flatten list of lists, and convert each Document to string
+    flattened_docs = [dumps(doc) for sublist in documents for doc in sublist]
+    # Get unique documents
+    unique_docs = list(set(flattened_docs))
+    # Return
+    return [loads(doc) for doc in unique_docs]
+
+def debug_queries(queries):
+    print("=== GENERATED QUESTIONS ===")
+    for i, q in enumerate(queries, 1):
+        print(f"{i}. {q}")
+    print("=========================")
+    return queries
+
+retrieval_chain = generate_queries | debug_queries | retriever.map() | get_unique_union
+
+template = """Responde a la siguiente pregunta usando el contexto seleccionado
+
+{context}
+
+Pregunta: {question}
+"""
+
+
+prompt = ChatPromptTemplate.from_template(template)
 
 # LLM
 llm = ChatOpenAI(model_name="gpt-3.5-turbo", temperature=0)
 
-# Post-processing
-def format_docs(docs):
-    return "\n\n".join(doc.page_content for doc in docs)
 
-# Chain
-rag_chain = (
-    {"context": retriever | format_docs, "question": RunnablePassthrough()}
+
+final_rag_chain = (
+    {"context": retrieval_chain, 
+     "question": itemgetter("question")} 
     | prompt
     | llm
     | StrOutputParser()
 )
 
-# Question
-answer = rag_chain.invoke("What is Task Decomposition?")
+final_inputs = {
+    "context": [doc.page_content for doc in retrieval_chain.invoke({"question": question})],
+    "question": question
+}
+
+print("Final inputs:", final_inputs)
+
+answer = final_rag_chain.invoke({"question":question})
 print(answer)
