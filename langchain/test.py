@@ -48,14 +48,12 @@ def hybrid_retrieval(query_input):
     
     # Combine both sets of documents
     combined_docs = [bm25_docs, vector_docs]
-    scored_docs = reciprocal_rank_fusion(combined_docs)
+    final_docs = reciprocal_rank_fusion(combined_docs)
 
-    all_docs = [doc for doc, score in scored_docs]
-
-    filtered_docs = gradeDocsFinal(all_docs)
+    final_docs = [doc for doc,scores in final_docs[:6]]
     
     # Use your existing function to get unique documents
-    return filtered_docs
+    return final_docs
 
 #Function to rank selection. Update pls.
 def reciprocal_rank_fusion(results: list[list], k=60):
@@ -141,10 +139,15 @@ def debug_queries(queries):
 current_time = datetime.now().time()
 current_date = date.today()
 
+Type_Skills = {
+    "static_skill": False,
+    "dynamic_skill": False,
+}
 
 Skills = {
     "current_time": False,
     "current_date": False,
+    "vector_store": False,
 },
 
 script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -188,88 +191,9 @@ class GradeDocuments(BaseModel):
         description="Documents are relevant to the question, 'yes' or 'no'"
     )
 
-class TaskDistinction(BaseModel):
-    """Binary score for task distinction that needs to be ran"""
-
-    dynamic_skill: str = Field(
-        description="Will you need to consult the vector database in order to get the information you need." \
-        " The vector database is filled with information like how I met my friend el inmortal . Answer exclusively with "
-        "'yes' or 'no'"
-    )
-
-    static_skill: str = Field(
-        description="Will you use any of these skills, current time or current date. Answer with 'yes' or 'no' and only answer yes if youre very sure that thats what the user wants."
-    )
-
-
-
-def grade_documents(docs):
-    """
-    Determines whether the retrieved documents are relevant to the question.
-
-    Args:
-        state (dict): The current graph state
-
-    Returns:
-        state (dict): Updates documents key with only filtered relevant documents
-    """
-
-    print("---CHECK DOCUMENT RELEVANCE TO QUESTION---")
-    documents = docs
-
-    # Score each doc
-    filtered_docs = []
-    for d in documents:
-        score = retrieval_grader.invoke(
-            {"question": question, "document": d.page_content}
-        )
-        grade = score.binary_score
-        if grade == "yes":
-            print("---GRADE: DOCUMENT RELEVANT---")
-            filtered_docs.append(d)
-        else:
-            print("---GRADE: DOCUMENT NOT RELEVANT---")
-            continue
-    return {"documents": filtered_docs, "question": question}
 
 
 llm = ChatOpenAI(model_name="gpt-3.5-turbo", temperature=0)
-
-#Define structured llm Grader
-structured_llm_grader = llm.with_structured_output(GradeDocuments)
-
-system = """You are a grader assessing relevance of a retrieved document to a user question. \n 
-    If the document contains keyword(s) or semantic meaning related to the question, grade it as relevant. \n
-    Give a binary score 'yes' or 'no' score to indicate whether the document is relevant to the question."""
-grade_prompt = ChatPromptTemplate.from_messages(
-    [
-        ("system", system),
-        ("human", "Retrieved document: \n\n {document} \n\n User question: {question}"),
-    ]
-)
-
-retrieval_grader = grade_prompt | structured_llm_grader
-docs_grade = retriever.get_relevant_documents(question)
-
-def gradeDocsFinal(docs):
-    """Grade and filter documents using LLM structured output"""
-    print("---FILTERING DOCUMENTS WITH LLM GRADER---")
-    filtered_docs = []
-    
-    for doc in docs:
-        score = retrieval_grader.invoke({
-            "question": question, 
-            "document": doc.page_content
-        })
-        
-        if score.binary_score == "yes":
-            print(f"---DOCUMENT RELEVANT---")
-            filtered_docs.append(doc)
-        else:
-            print(f"---DOCUMENT NOT RELEVANT---")
-    
-    print(f"Filtered {len(filtered_docs)} out of {len(docs)} documents")
-    return filtered_docs
 
 
 # Implementando BM25 a mi modelo. Aver si era esto. Viva langchain. 
