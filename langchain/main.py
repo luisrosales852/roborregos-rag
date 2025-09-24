@@ -54,7 +54,9 @@ print("Script directory:", script_dir)
 loader = PyPDFLoader(pdf1_path)
 docs = loader.load()
 
+print(loader)
 embeddings_openai = OpenAIEmbeddings(model="text-embedding-3-large")
+
 
 # Split first document
 text_splitter = RecursiveCharacterTextSplitter(chunk_size=400, chunk_overlap=50)
@@ -92,7 +94,7 @@ Instrucciones para reescribir:
 - Elimina artículos, preposiciones y conectores innecesarios
 - Convierte verbos a sustantivos cuando sea posible
 - Mantén nombres propios, términos técnicos y conceptos específicos
-- Usa sinónimos adicionales si pueden ayudar a encontrar más documentos relevantes
+- No inventes palabras que no esten en la pregunta original
 - Estructura como una lista de términos clave separados por espacios
 - Máximo 8-10 palabras en la consulta reescrita
 
@@ -125,15 +127,6 @@ generate_queries = (
     | (lambda x: x.split("\n"))
 )
 
-def get_unique_union(documents: list[list]):
-    """ Unique union of retrieved docs """
-    # Flatten list of lists, and convert each Document to string
-    flattened_docs = [dumps(doc) for sublist in documents for doc in sublist]
-    # Get unique documents
-    unique_docs = list(set(flattened_docs))
-    # Return
-    return [loads(doc) for doc in unique_docs]
-
 def debug_queries(queries):
     print("=== GENERATED QUESTIONS ===")
     for i, q in enumerate(queries, 1):
@@ -141,7 +134,7 @@ def debug_queries(queries):
     print("=========================")
     return queries
 
-retrieval_chain = generate_queries | debug_queries | retriever.map() | get_unique_union
+retrieval_chain = generate_queries | debug_queries | retriever.map()
 
 template = """Responde a la siguiente pregunta usando el contexto seleccionado
 
@@ -172,14 +165,63 @@ def hybrid_retrieval(query_input):
     bm25_query = generate_bm25_query.invoke({"question": question})
     bm25_docs = bm25_retriever.invoke(bm25_query)
     
+
     # Get vector search results
     vector_docs = retrieval_chain.invoke(query_input)
+    vector_docs = [doc for doc_list in vector_docs for doc in doc_list]
     
     # Combine both sets of documents
     combined_docs = [bm25_docs, vector_docs]
+    final_docs = reciprocal_rank_fusion(combined_docs)
+
+    final_docs = [doc for doc,scores in final_docs[:6]]
     
     # Use your existing function to get unique documents
-    return get_unique_union(combined_docs)
+    return final_docs
+
+#Function to rank selection. Update pls.
+def reciprocal_rank_fusion(results: list[list], k=60):
+    """ Reciprocal_rank_fusion that takes multiple lists of ranked documents 
+        and an optional parameter k used in the RRF formula """
+    
+    # Initialize a dictionary to hold fused scores for each unique document
+    fused_scores = {}
+
+    bm25_scores = []
+    vector_scores = []
+
+
+    # Iterate through each list of ranked documents
+    for id_list, docs in enumerate(results):
+        # Iterate through each document in the list, with its rank (position in the list)
+        for rank, doc in enumerate(docs):
+            # Convert the document to a string format to use as a key (assumes documents can be serialized to JSON)
+            doc_str = dumps(doc)
+            score_docs = 1/(rank+k)
+            # If the document is not yet in the fused_scores dictionary, add it with an initial score of 0
+            if doc_str not in fused_scores:
+                fused_scores[doc_str] = 0
+            # Retrieve the current score of the document, if any
+            # Update the score of the document using the RRF formula: 1 / (rank + k)
+            fused_scores[doc_str] += score_docs
+            if id_list == 0:
+                bm25_scores.append(score_docs)
+            else:
+                vector_scores.append(score_docs)
+
+    if bm25_scores:
+        print(f"Average BM25 RRF Score: {sum(bm25_scores)/len(bm25_scores):.6f}")
+    if vector_scores:
+        print(f"Average Vector RRF Score: {sum(vector_scores)/len(vector_scores):.6f}")
+        
+    # Sort the documents based on their fused scores in descending order to get the final reranked results
+    reranked_results = [
+        (loads(doc), score)
+        for doc, score in sorted(fused_scores.items(), key=lambda x: x[1], reverse=True)
+    ]
+
+    # Return the reranked results as a list of tuples, each containing the document and its fused score
+    return reranked_results
 
 final_rag_chain = (
     {"context": hybrid_retrieval | RunnableLambda(format_docs), 
