@@ -21,9 +21,12 @@ from langchain_community.retrievers import BM25Retriever
 from datetime import datetime, date
 import functions
 from pydantic import BaseModel, Field
+from caching import RAGCacheManager
 
 
 #Definir static fact and dynamic fact
+
+cache_manager = RAGCacheManager(redis_url="redis://localhost:6379", cache_prefix="rag_cache", max_qa_pairs=10000)
 
 def handle_static_skills(question):
     """Handle questions that require static skills - provide all available info"""
@@ -47,6 +50,10 @@ def handle_static_skills(question):
 
 
 def routeQuestion(question):
+    cached_answer = cache_manager.get_cached_answer(question)
+    if cached_answer:
+        return cached_answer
+    
     print("Lets analyse the question type")
     task_result = task_grader.invoke({"question": question})
     print(f"Dynamic skill needed: {task_result.dynamic_skill}")
@@ -60,22 +67,25 @@ def routeQuestion(question):
         print(f"Reflex Vector: {vector_result.reflexVector}")
         if vector_result.inmortalVector == "yes":
             print("Routing to Inmortal Vector Store")
-            return create_rag_response(question, "vector1")
+            answer = create_rag_response(question, "vector1")
         elif vector_result.reflexVector == "yes":
             print("Routing to Reflex Vector Store")
-            return create_rag_response(question, "vector2")
+            answer = create_rag_response(question, "vector2")
         else:
             print("No specific vector store selected, defaulting to vector store 1")
-            return create_rag_response(question, "vector1")
+            answer = create_rag_response(question, "vector1")
         
     if task_result.static_skill == "yes":
         print("We route to static skills")
-        return handle_static_skills(question)
+        answer = handle_static_skills(question)
     else:
         print("---ROUTING TO BASIC LLM---")
         basic_prompt = ChatPromptTemplate.from_template("Answer this question: {question}")
         basic_chain = basic_prompt | llm | StrOutputParser()
-        return basic_chain.invoke({"question": question})
+        answer = basic_chain.invoke({"question": question})
+    cache_manager.cache_qa_pair(question, answer)
+    return answer
+    
 
 def debug_formatted_prompt(formatted_prompt):
     print("Prompt")
@@ -99,6 +109,9 @@ def hybrid_retrieval(query_input, vector_store_choice):
     bm25_query = generate_bm25_query.invoke({"question": question})
     print(f"These is the better bm25 query: {bm25_query}")
     bm25_docs = bm25_retriever.invoke(bm25_query)
+
+    print("This is the first bm25 docs")
+    print(bm25_docs[0])
     
     # Get vector search results
     retrieval_chain = generate_queries | debug_queries | retriever.map()
@@ -233,6 +246,8 @@ docs2 = loader2.load()
 
 print(loader1)
 embeddings_openai = OpenAIEmbeddings(model="text-embedding-3-large")
+embeddings_openai = cache_manager.setup_cached_embeddings(embeddings_openai)
+
 
 # Split first document
 text_splitter = RecursiveCharacterTextSplitter(chunk_size=400, chunk_overlap=50)
