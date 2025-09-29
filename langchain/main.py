@@ -3,6 +3,7 @@ from dotenv import load_dotenv
 from uuid import uuid4
 
 load_dotenv()
+REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
 
 import re
 from langchain import hub
@@ -22,11 +23,15 @@ from datetime import datetime, date
 import functions
 from pydantic import BaseModel, Field
 from caching import RAGCacheManager
+from langchain.globals import set_llm_cache
+from langchain.cache import RedisCache
+
+#Setting llm cache?
+set_llm_cache(RedisCache(redis_url=REDIS_URL))
 
 
 #Definir static fact and dynamic fact
-
-cache_manager = RAGCacheManager(redis_url="redis://localhost:6379", cache_prefix="rag_cache", max_qa_pairs=10000)
+cache_manager = RAGCacheManager(redis_url=REDIS_URL, cache_prefix="rag_cache", max_qa_pairs=10000)
 
 def handle_static_skills(question):
     """Handle questions that require static skills - provide all available info"""
