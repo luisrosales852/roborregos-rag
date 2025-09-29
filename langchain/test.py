@@ -217,10 +217,8 @@ prompt_bm25 = ChatPromptTemplate.from_template(template_bm25)
 generate_bm25_query = prompt_bm25 | ChatOpenAI(temperature=0) | StrOutputParser()
 bm25_query = generate_bm25_query.invoke({"question": question})
 print("BM25 Optimized Query:", bm25_query)
-bm25_retriever = BM25Retriever.from_documents(splits, k=3)
-results_bm25 = bm25_retriever.invoke(bm25_query)
-print("BM25 Results:", results_bm25)
-
+bm25_retriever1 = BM25Retriever.from_documents(splits,k=3)
+bm25_retriever2 = BM25Retriever.from_documents(splits2, k=3)
 
 
 
