@@ -73,7 +73,7 @@ class RAGCacheManager:
             current_count = self._get_current_qa_count()
         
             if current_count >= self.max_qa_pairs:
-                print(f"📊 Cache at capacity ({current_count}/{self.max_qa_pairs})")
+                print(f"Cache at capacity ({current_count}/{self.max_qa_pairs})")
             
                 # Get first (oldest) key from scan and evict it
                 pattern = f"{self.cache_prefix}:qa:*"

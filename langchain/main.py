@@ -20,15 +20,16 @@ from langchain.load import dumps, loads
 from operator import itemgetter
 from langchain_community.retrievers import BM25Retriever
 from datetime import datetime, date
-import functions
 from pydantic import BaseModel, Field
 from caching import RAGCacheManager
 from langchain.globals import set_llm_cache
 from langchain.cache import RedisCache
+from langchain_community.cache import RedisCache
+import redis
 
 #Setting llm cache?
-set_llm_cache(RedisCache(redis_url=REDIS_URL))
-
+redis_client = redis.from_url(REDIS_URL)
+set_llm_cache(RedisCache(redis_=redis_client))
 
 #Definir static fact and dynamic fact
 cache_manager = RAGCacheManager(redis_url=REDIS_URL, cache_prefix="rag_cache", max_qa_pairs=10000)
@@ -80,7 +81,7 @@ def routeQuestion(question):
             print("No specific vector store selected, defaulting to vector store 1")
             answer = create_rag_response(question, "vector1")
         
-    if task_result.static_skill == "yes":
+    elif task_result.static_skill == "yes":
         print("We route to static skills")
         answer = handle_static_skills(question)
     else:
@@ -255,36 +256,41 @@ embeddings_openai = cache_manager.setup_cached_embeddings(embeddings_openai)
 
 
 # Split first document
-text_splitter = RecursiveCharacterTextSplitter(chunk_size=400, chunk_overlap=50)
-splits1 = text_splitter.split_documents(docs1)
-splits1 = clean_document_list(splits1)
-
-print(splits1[0])
-print(f"Document1 split into {len(splits1)} chunks.")
 
 # Split second document
-text_splitter2 = CharacterTextSplitter(separator="---",chunk_size=1000, chunk_overlap=0)
-splits2 = text_splitter2.split_documents(docs2)
-splits2 = clean_document_list(splits2)
-
-print(splits2[0])
-print(f"Document 2 split into {len(splits2)} chunks")
 
 
-uuids1 = [str(uuid4()) for _ in range(len(splits1))]
-uuids2 = [str(uuid4()) for _ in range(len(splits2))]
+
+
+
+
 existing_vectorstore = os.path.exists("./chroma_knowledge1_db")
 existing_vectorstore2 = os.path.exists("./chroma_knowledge2_db")
 
 vectorstore1 = Chroma(collection_name="knowledge1_collection",embedding_function=embeddings_openai, persist_directory="./chroma_knowledge1_db")
 vectorstore2 = Chroma(collection_name="knowledge2_collection", embedding_function=embeddings_openai, persist_directory="./chroma_knowledge2_db")
 
+text_splitter = RecursiveCharacterTextSplitter(chunk_size=400, chunk_overlap=50)
+splits1 = text_splitter.split_documents(docs1)
+splits1 = clean_document_list(splits1)
+uuids1 = [str(uuid4()) for _ in range(len(splits1))]
+
+text_splitter2 = CharacterTextSplitter(separator="---",chunk_size=1000, chunk_overlap=0)
+splits2 = text_splitter2.split_documents(docs2)
+splits2 = clean_document_list(splits2)
+print(splits2[0])
+uuids2 = [str(uuid4()) for _ in range(len(splits2))]
+print(f"Document 2 split into {len(splits2)} chunks")
+
 if(existing_vectorstore == False):
+    
     vectorstore1.add_documents(documents=splits1, ids=uuids1)
     print("Added documents to vectorstore")
 
 if(existing_vectorstore2 == False):
+    
     vectorstore2.add_documents(documents=splits2, ids=uuids2)
+    
 
 
 
