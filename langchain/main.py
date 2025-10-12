@@ -65,7 +65,7 @@ def routeQuestion(question):
     print(f"Static skill needed: {task_result.static_skill}")
     
     if task_result.dynamic_skill == "yes":
-        print("We route ro rag chain")
+        print("We route to rag chain")
         print("Now to decide to which vector store do we route this too")
         vector_result = vector_store_grader.invoke({"question": question})
         print(f"Inmortal vector: {vector_result.inmortalVector}")
