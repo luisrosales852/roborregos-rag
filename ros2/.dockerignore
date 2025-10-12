@@ -1,0 +1,34 @@
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+
+# ROS2
+install/
+log/
+build/
+
+# Vector databases (will be created in volume)
+rag_service/data/vector_dbs/*
+
+# Environment files (should be passed as env vars)
+*.env
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Documentation
+*.txt
+*.md
