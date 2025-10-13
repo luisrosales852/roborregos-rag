@@ -6,7 +6,7 @@ import redis
 from langchain.cache import RedisCache
 from langchain.globals import set_llm_cache
 from langchain_community.storage import RedisStore
-from langchain.embeddings import CacheBackedEmbeddings
+from langchain_community.embeddings import CacheBackedEmbeddings
 
 class RAGCacheManager:
     def __init__(self, 

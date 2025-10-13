@@ -101,7 +101,7 @@ class RAGServiceNode(Node):
             from langchain_community.retrievers import BM25Retriever
             from datetime import datetime, date
             from pydantic import BaseModel, Field
-            from caching import RAGCacheManager  # Import from local caching.py
+            from rag_service.caching import RAGCacheManager  # Import from package caching.py
             from langchain.globals import set_llm_cache
             from langchain.cache import RedisCache
 
