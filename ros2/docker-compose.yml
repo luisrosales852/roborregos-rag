@@ -1,9 +1,5 @@
 version: '3.8'
 
-# Load environment variables from rag_service/.env
-env_file:
-  - ./rag_service/.env
-
 services:
   # Redis service for caching
   redis:
@@ -36,7 +32,8 @@ services:
       - REDIS_URL=redis://redis:6379
       - ROS_DOMAIN_ID=${ROS_DOMAIN_ID:-0}
     volumes:
-      # Mount the package source for development (optional)
+      # Mount the package sources for development (optional)
+      - ./rag_interfaces:/ros2_ws/src/rag_interfaces
       - ./rag_service:/ros2_ws/src/rag_service
       # Persist vector databases
       - vector_dbs:/ros2_ws/src/rag_service/data/vector_dbs

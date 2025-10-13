@@ -6,6 +6,7 @@ load_dotenv()
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
 
 import re
+import redis
 from langchain import hub
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_core.output_parsers import StrOutputParser
@@ -20,14 +21,14 @@ from langchain.load import dumps, loads
 from operator import itemgetter
 from langchain_community.retrievers import BM25Retriever
 from datetime import datetime, date
-import functions
 from pydantic import BaseModel, Field
 from caching import RAGCacheManager
 from langchain.globals import set_llm_cache
-from langchain.cache import RedisCache
+from langchain_community.cache import RedisCache
 
 #Setting llm cache?
-set_llm_cache(RedisCache(redis_url=REDIS_URL))
+redis_client = redis.Redis.from_url(REDIS_URL, decode_responses=True)
+set_llm_cache(RedisCache(redis_=redis_client))
 
 
 #Definir static fact and dynamic fact
@@ -80,7 +81,7 @@ def routeQuestion(question):
             print("No specific vector store selected, defaulting to vector store 1")
             answer = create_rag_response(question, "vector1")
         
-    if task_result.static_skill == "yes":
+    elif task_result.static_skill == "yes":
         print("We route to static skills")
         answer = handle_static_skills(question)
     else:

@@ -3,11 +3,10 @@ import json
 import pickle
 from typing import Optional, Dict
 import redis
-from langchain.cache import RedisCache
+from langchain_community.cache import RedisCache
 from langchain.globals import set_llm_cache
 from langchain_community.storage import RedisStore
-from langchain_community.embeddings import CacheBackedEmbeddings
-
+from langchain.embeddings import CacheBackedEmbeddings
 class RAGCacheManager:
     def __init__(self, 
                  redis_url = "redis://localhost:6379",
@@ -19,7 +18,7 @@ class RAGCacheManager:
         self.max_qa_pairs = max_qa_pairs
         
         # Initialize Redis client
-        self.redis_client = redis.from_url(redis_url, decode_responses=False)
+        self.redis_client = redis.Redis.from_url(redis_url, decode_responses=True)
         
         # Test Redis connection
         try:
@@ -34,7 +33,6 @@ class RAGCacheManager:
             client=self.redis_client,
             namespace="embeddings"
         )
-        
     def setup_cached_embeddings(self, base_embeddings):
         cached_embeddings = CacheBackedEmbeddings.from_bytes_store(
             base_embeddings,

@@ -14,6 +14,8 @@ RUN apt-get update && apt-get install -y \
     python3-pip \
     python3-colcon-common-extensions \
     python3-rosdep \
+    ros-humble-rosidl-default-generators \
+    ros-humble-rosidl-default-runtime \
     git \
     wget \
     curl \
@@ -37,13 +39,16 @@ RUN pip3 install --no-cache-dir \
 # Create workspace
 WORKDIR /ros2_ws
 
-# Copy the ROS2 package
+# Copy the ROS2 packages
+COPY rag_interfaces /ros2_ws/src/rag_interfaces
 COPY rag_service /ros2_ws/src/rag_service
 
-# Source ROS2 and build the package
+# Source ROS2 and build the packages (interfaces first, then service)
 RUN /bin/bash -c "source /opt/ros/${ROS_DISTRO}/setup.bash && \
     cd /ros2_ws && \
-    colcon build --packages-select rag_service --symlink-install"
+    colcon build --packages-select rag_interfaces --event-handlers console_direct+ && \
+    source /ros2_ws/install/setup.bash && \
+    colcon build --packages-select rag_service --event-handlers console_direct+"
 
 # Create entrypoint script
 RUN echo '#!/bin/bash\n\

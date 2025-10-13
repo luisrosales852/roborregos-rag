@@ -16,7 +16,7 @@ Author: Generated for RoboRregos RAG Application
 
 import rclpy
 from rclpy.node import Node
-from rag_service.srv import RAGQuery
+from rag_interfaces.srv import RAGQuery
 import sys
 
 

@@ -1,9 +1,9 @@
 import hashlib
 import json
 import pickle
-from typing import Optional, Dict
 import redis
-from langchain.cache import RedisCache
+from typing import Optional, Dict
+from langchain_community.cache import RedisCache
 from langchain.globals import set_llm_cache
 from langchain_community.storage import RedisStore
 from langchain.embeddings import CacheBackedEmbeddings

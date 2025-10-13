@@ -15,11 +15,12 @@ Author: Generated for RoboRregos RAG Application
 
 import rclpy
 from rclpy.node import Node
-from rag_service.srv import RAGQuery
+from rag_interfaces.srv import RAGQuery
 import sys
 import os
 import time
 from pathlib import Path
+import redis
 
 # Get the ROS2 package directory
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -103,7 +104,7 @@ class RAGServiceNode(Node):
             from pydantic import BaseModel, Field
             from rag_service.caching import RAGCacheManager  # Import from package caching.py
             from langchain.globals import set_llm_cache
-            from langchain.cache import RedisCache
+            from langchain_community.cache import RedisCache
 
             # Store imports as instance variables for later use
             self.modules = {
@@ -141,9 +142,11 @@ class RAGServiceNode(Node):
     def _initialize_rag_system(self):
         """Initialize the RAG system with all necessary components."""
         try:
+            redis_client = redis.Redis.from_url(self.redis_url, decode_responses=True)
             # Set up LLM cache
+
             self.modules['set_llm_cache'](
-                self.modules['RedisCache'](redis_url=self.redis_url)
+                self.modules['RedisCache'](redis_=redis_client)
             )
 
             # Initialize cache manager
@@ -163,18 +166,10 @@ class RAGServiceNode(Node):
                 temperature=0
             )
 
-            # Get parameters (paths relative to package root)
-            knowledge1_pdf = self.get_parameter('knowledge1_pdf').value
-            knowledge2_pdf = self.get_parameter('knowledge2_pdf').value
 
             # Load PDF documents from package root
-            pdf1_path = PACKAGE_ROOT / knowledge1_pdf
-            pdf2_path = PACKAGE_ROOT / knowledge2_pdf
-
-            # Ensure paths are absolute
-            pdf1_path = str(pdf1_path.resolve())
-            pdf2_path = str(pdf2_path.resolve())
-
+            pdf1_path = "C:\Users\const\VSCODE\Programacion Uni\3erSemestre\actividades\roborregos-rag\ros2\rag_service\data\pdfs\knowledge1.pdf"
+            pdf2_path = "C:\Users\const\VSCODE\Programacion Uni\3erSemestre\actividades\roborregos-rag\ros2\rag_service\data\pdfs\knowledge2.pdf"
             self.get_logger().info(f'Loading PDF 1: {pdf1_path}')
             self.get_logger().info(f'Loading PDF 2: {pdf2_path}')
 
