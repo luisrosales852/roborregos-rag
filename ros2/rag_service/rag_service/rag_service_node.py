@@ -24,7 +24,10 @@ import redis
 
 # Get the ROS2 package directory
 SCRIPT_DIR = Path(__file__).resolve().parent
-PACKAGE_ROOT = SCRIPT_DIR.parent  # rag_service package root
+if Path('/ros2_ws/src/rag_service').exists():
+    PACKAGE_ROOT = Path('/ros2_ws/src/rag_service')
+else:
+    PACKAGE_ROOT = SCRIPT_DIR.parent
 
 
 class RAGServiceNode(Node):
@@ -168,13 +171,13 @@ class RAGServiceNode(Node):
 
 
             # Load PDF documents from package root
-            pdf1_path = "C:\Users\const\VSCODE\Programacion Uni\3erSemestre\actividades\roborregos-rag\ros2\rag_service\data\pdfs\knowledge1.pdf"
-            pdf2_path = "C:\Users\const\VSCODE\Programacion Uni\3erSemestre\actividades\roborregos-rag\ros2\rag_service\data\pdfs\knowledge2.pdf"
+            pdf1_path = PACKAGE_ROOT / "data/pdfs/knowledge1.pdf"
+            pdf2_path = PACKAGE_ROOT / "data/pdfs/knowledge2.pdf"
             self.get_logger().info(f'Loading PDF 1: {pdf1_path}')
             self.get_logger().info(f'Loading PDF 2: {pdf2_path}')
 
-            loader1 = self.modules['PyPDFLoader'](pdf1_path)
-            loader2 = self.modules['PyPDFLoader'](pdf2_path)
+            loader1 = self.modules['PyPDFLoader'](str(pdf1_path))
+            loader2 = self.modules['PyPDFLoader'](str(pdf2_path))
             docs1 = loader1.load()
             docs2 = loader2.load()
 
@@ -279,7 +282,8 @@ class RAGServiceNode(Node):
             dynamic_skill: str = self.modules['Field'](
                 description="Will you need to consult the vector database in order to get the information you need." \
                 " The vector database is filled with information like how I met my friend el inmortal . Answer exclusively with "
-                " 'no'. If I reference in any way a character named inmortal please do put 'yes' in this part. Even if just the word inmortal is present." \
+                " 'no'. If I reference in any way a character named inmortal please do put 'yes' in this part. I also talk a little bit about myself in this vector store" \
+                "My name is Luis ALvaro Rosales Salazar so if I mention Luis put yes, also even if just the word inmortal is present." \
                 "I also have a second vector store, this vector store talks about the products that Reflex , a company specializing in selling customers and enterprises" \
                 "construction goods like glue or cement, has. If at any point I mention reflex or anything pertaining to construction please answer yes since I am going to" \
                 "need to consult this vector database"
@@ -436,7 +440,10 @@ Proporciona estas preguntas alternativas separadas por saltos de línea. Pregunt
             })
 
             if score.binary_score == "yes":
+                self.get_logger().info("Document is relevant")
                 filtered_docs.append(doc)
+            else:
+                self.get_logger().info("Document is not relevant")
 
         return filtered_docs
 
@@ -453,19 +460,31 @@ Proporciona estas preguntas alternativas separadas por saltos de línea. Pregunt
 
         # BM25 retrieval
         bm25_query = self.generate_bm25_query.invoke({"question": question})
+        self.get_logger().info(f'BM25 query: {bm25_query}')
         bm25_docs = bm25_retriever.invoke(bm25_query)
 
-        # Vector search
-        retrieval_chain = self.generate_queries | retriever.map()
+        # Vector search - use a lambda to log the generated questions
+        def debug_queries(queries):
+            self.get_logger().info(f'Generated {len(queries)} question variations:')
+            for i, q in enumerate(queries, 1):
+                self.get_logger().info(f'  {i}. {q}')
+            return queries
+
+        retrieval_chain = self.generate_queries | self.modules['RunnableLambda'](debug_queries) | retriever.map()
         vector_docs = retrieval_chain.invoke(query_input)
         vector_docs = [doc for doc_list in vector_docs for doc in doc_list]
+        self.get_logger().info(f'Vector search retrieved {len(vector_docs)} documents')
 
         # Combine both sets of documents
+        self.get_logger().info(f'BM25 docs: {len(bm25_docs)}, Vector docs: {len(vector_docs)}')
         combined_docs = [bm25_docs, vector_docs]
         scored_docs = self._reciprocal_rank_fusion(combined_docs)
+        self.get_logger().info(f'After RRF fusion: {len(scored_docs)} unique documents')
 
         all_docs = [doc for doc, score in scored_docs]
+        self.get_logger().info(f'Grading {len(all_docs)} documents...')
         filtered_docs = self._grade_docs_final(all_docs, question)
+        self.get_logger().info(f'After grading: {len(filtered_docs)} relevant documents')
 
         return filtered_docs
 

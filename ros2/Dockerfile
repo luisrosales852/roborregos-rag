@@ -33,6 +33,7 @@ RUN pip3 install --no-cache-dir \
     pypdf \
     python-dotenv \
     redis \
+    rank_bm25 \
     pydantic \
     tiktoken
 
