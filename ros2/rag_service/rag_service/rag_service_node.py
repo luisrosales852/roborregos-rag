@@ -230,13 +230,13 @@ class RAGServiceNode(Node):
             )
 
             # Check if we need to populate vector stores
-            if not os.path.exists(vector_db1_path):
+            if self.vectorstore1._collection.count() == 0:
                 from uuid import uuid4
                 uuids1 = [str(uuid4()) for _ in range(len(splits1))]
                 self.vectorstore1.add_documents(documents=splits1, ids=uuids1)
                 self.get_logger().info('Populated vector store 1')
 
-            if not os.path.exists(vector_db2_path):
+            if self.vectorstore2._collection.count() == 0:
                 from uuid import uuid4
                 uuids2 = [str(uuid4()) for _ in range(len(splits2))]
                 self.vectorstore2.add_documents(documents=splits2, ids=uuids2)
