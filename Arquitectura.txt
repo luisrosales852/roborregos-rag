@@ -1,0 +1,108 @@
+ARQUITECTURA ROS2 - SISTEMA RAG
+================================
+
+## Diagrama de Arquitectura
+
+┌─────────────────────────────────────────────────────────────────┐
+│                        DOCKER COMPOSE                           │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  ┌──────────┐       ┌─────────────────┐       ┌──────────┐   │
+│  │  Redis   │◄──────┤  rag_service    │◄──────┤  Client  │   │
+│  │  :6379   │       │  (ROS2 Node)    │       │ (Optional)│   │
+│  └──────────┘       └─────────────────┘       └──────────┘   │
+│      │                      │                                  │
+│   Caché              Servicio: /rag_query                      │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+
+## Pipeline de Consulta
+
+  Cliente ROS2
+      │
+      ▼
+  /rag_query (RAGQuery.srv)
+      │
+      ▼
+  ┌───────────────────────┐
+  │  Revisar Caché Redis  │──► Si existe → Retornar
+  └───────────────────────┘
+      │ No existe
+      ▼
+  ┌───────────────────────┐
+  │  Mejorar Pregunta     │ (LLM query optimization)
+  └───────────────────────┘
+      │
+      ▼
+  ┌───────────────────────┐
+  │ Clasificar Tarea      │
+  │ - dynamic_skill?      │
+  │ - static_skill?       │
+  └───────────────────────┘
+      │
+      ├─► Static Skill → Hora/Fecha actual
+      │
+      ├─► Dynamic Skill (RAG)
+      │         │
+      │         ▼
+      │   ┌─────────────────┐
+      │   │ Router Vector   │
+      │   │ Store           │
+      │   └─────────────────┘
+      │         │
+      │         ├─► Vector 1: knowledge1.pdf (Inmortal/Luis)
+      │         │
+      │         └─► Vector 2: knowledge2.pdf (Reflex/Productos)
+      │                │
+      │                ▼
+      │         ┌──────────────────┐
+      │         │ Hybrid Retrieval │
+      │         ├──────────────────┤
+      │         │ • BM25 Search    │
+      │         │ • Vector Search  │
+      │         │   (3 variaciones)│
+      │         │ • RRF Fusion     │
+      │         └──────────────────┘
+      │                │
+      │                ▼
+      │         ┌──────────────────┐
+      │         │ Grade Documents  │ (Filtrar relevantes)
+      │         └──────────────────┘
+      │                │
+      │                ▼
+      └─────────► ┌─────────────┐
+                  │ GPT-4o-mini │ (Generar respuesta)
+                  └─────────────┘
+                        │
+                        ▼
+                  ┌─────────────┐
+                  │ Guardar en  │
+                  │   Caché     │
+                  └─────────────┘
+                        │
+                        ▼
+                    Respuesta
+
+## Componentes Principales
+
+### Servicios Docker
+- Redis: Caché distribuido (puerto 6379)
+- rag_service: Nodo ROS2 con sistema RAG
+- rag_client: Cliente ejemplo (perfil "client")
+
+### Paquetes ROS2
+1. rag_interfaces
+   - Servicio: RAGQuery.srv
+   - Request: question (string)
+   - Response: answer, success, error_message, response_time, from_cache
+
+2. rag_service
+   - Nodo: rag_service_node
+   - Servicio: /rag_query
+
+### Stack Tecnológico
+- LLM: ChatGPT (gpt-4o-mini)
+- Embeddings: OpenAI (text-embedding-3-large)
+- Vector DB: Chroma (2 instancias)
+- Caché: Redis
+- Framework: LangChain + ROS2

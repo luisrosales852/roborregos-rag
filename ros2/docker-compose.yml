@@ -18,6 +18,23 @@ services:
     networks:
       - rag_network
 
+  # Ollama service for local LLM (COMMENTED OUT - NOW USING CHATGPT/OPENAI)
+  # ollama:
+  #   image: ollama/ollama:latest
+  #   container_name: rag_ollama
+  #   ports:
+  #     - "11434:11434"
+  #   volumes:
+  #     - ollama_data:/root/.ollama
+  #   networks:
+  #     - rag_network
+  #   healthcheck:
+  #     test: ["CMD", "ollama", "list"]
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 5
+  #     start_period: 10s
+
   # ROS2 RAG Service
   rag_service:
     build:
@@ -27,8 +44,13 @@ services:
     depends_on:
       redis:
         condition: service_healthy
+      # ollama:  # COMMENTED OUT - NOW USING CHATGPT/OPENAI
+      #   condition: service_healthy
     environment:
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      # OLLAMA CONFIGURATION (COMMENTED OUT - NOW USING CHATGPT/OPENAI)
+      # - OLLAMA_BASE_URL=http://ollama:11434
+      # - OLLAMA_MODEL=${OLLAMA_MODEL:-llama3.1:8b}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}  # ChatGPT/OpenAI API Key
       - REDIS_URL=redis://redis:6379
       - ROS_DOMAIN_ID=${ROS_DOMAIN_ID:-0}
     volumes:
@@ -66,6 +88,8 @@ volumes:
     driver: local
   vector_dbs:
     driver: local
+  # ollama_data:  # COMMENTED OUT - NOW USING CHATGPT/OPENAI
+  #   driver: local
 
 networks:
   rag_network:

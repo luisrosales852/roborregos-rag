@@ -1,17 +1,4 @@
-#!/usr/bin/env python3
-"""
-ROS2 RAG Service Node
 
-This node provides a ROS2 service interface for the RAG (Retrieval-Augmented Generation) system.
-It wraps the existing RAG implementation from the langchain module and exposes it as a ROS2 service.
-
-Service: /rag_query (rag_service/srv/RAGQuery)
-    - Request: question (string)
-    - Response: answer (string), success (bool), error_message (string),
-                response_time (float32), from_cache (bool)
-
-Author: Generated for RoboRregos RAG Application
-"""
 
 import rclpy
 from rclpy.node import Node
@@ -21,6 +8,8 @@ import os
 import time
 from pathlib import Path
 import redis
+
+
 
 # Get the ROS2 package directory
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -86,7 +75,15 @@ class RAGServiceNode(Node):
 
             # Get environment variables
             self.redis_url = os.getenv("REDIS_URL", "redis://localhost:6379")
+            # OLLAMA CONFIGURATION (COMMENTED OUT - NOW USING CHATGPT/OPENAI)
+            # self.ollama_base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+            # self.ollama_model = os.getenv("OLLAMA_MODEL", "llama3.1:8b")
+            # ChatGPT/OpenAI configuration
+            self.openai_api_key = os.getenv("OPENAI_API_KEY")
             self.get_logger().info(f'Redis URL: {self.redis_url}')
+            # self.get_logger().info(f'Ollama Base URL: {self.ollama_base_url}')
+            # self.get_logger().info(f'Ollama Model: {self.ollama_model}')
+            self.get_logger().info('Using ChatGPT (OpenAI) for LLM and embeddings')
 
             # Import all necessary modules from main.py
             import re
@@ -94,6 +91,9 @@ class RAGServiceNode(Node):
             from langchain.text_splitter import RecursiveCharacterTextSplitter
             from langchain_core.output_parsers import StrOutputParser
             from langchain_core.runnables import RunnablePassthrough, RunnableLambda
+            # OLLAMA IMPORTS (COMMENTED OUT)
+            # from langchain_ollama import ChatOllama, OllamaEmbeddings
+            # OPENAI IMPORTS
             from langchain_openai import ChatOpenAI, OpenAIEmbeddings
             from langchain_chroma import Chroma
             from langchain_community.document_loaders import PyPDFLoader
@@ -116,6 +116,10 @@ class RAGServiceNode(Node):
                 'StrOutputParser': StrOutputParser,
                 'RunnablePassthrough': RunnablePassthrough,
                 'RunnableLambda': RunnableLambda,
+                # OLLAMA MODULES (COMMENTED OUT)
+                # 'ChatOllama': ChatOllama,
+                # 'OllamaEmbeddings': OllamaEmbeddings,
+                # OPENAI MODULES
                 'ChatOpenAI': ChatOpenAI,
                 'OpenAIEmbeddings': OpenAIEmbeddings,
                 'Chroma': Chroma,
@@ -163,7 +167,14 @@ class RAGServiceNode(Node):
             self.current_time = self.modules['datetime'].now().time()
             self.current_date = self.modules['date'].today()
 
-            # Initialize LLM
+            # Initialize LLM with ChatGPT/OpenAI
+            # OLLAMA VERSION (COMMENTED OUT):
+            # self.llm = self.modules['ChatOllama'](
+            #     model=self.ollama_model,
+            #     base_url=self.ollama_base_url,
+            #     temperature=0
+            # )
+            # CHATGPT/OPENAI VERSION (ACTIVE):
             self.llm = self.modules['ChatOpenAI'](
                 model_name="gpt-4o-mini",
                 temperature=0
@@ -181,7 +192,13 @@ class RAGServiceNode(Node):
             docs1 = loader1.load()
             docs2 = loader2.load()
 
-            # Initialize embeddings
+            # Initialize embeddings with ChatGPT/OpenAI
+            # OLLAMA VERSION (COMMENTED OUT):
+            # embeddings_ollama = self.modules['OllamaEmbeddings'](
+            #     model=self.ollama_model,
+            #     base_url=self.ollama_base_url
+            # )
+            # CHATGPT/OPENAI VERSION (ACTIVE):
             embeddings_openai = self.modules['OpenAIEmbeddings'](
                 model="text-embedding-3-large"
             )
@@ -200,7 +217,7 @@ class RAGServiceNode(Node):
 
             text_splitter2 = self.modules['CharacterTextSplitter'](
                 separator="---",
-                chunk_size=1000,
+                chunk_size=2000,
                 chunk_overlap=0
             )
             splits2 = text_splitter2.split_documents(docs2)
@@ -219,13 +236,13 @@ class RAGServiceNode(Node):
 
             self.vectorstore1 = self.modules['Chroma'](
                 collection_name="knowledge1_collection",
-                embedding_function=embeddings_openai,
+                embedding_function=embeddings_openai,  # Changed from embeddings_ollama
                 persist_directory=vector_db1_path
             )
 
             self.vectorstore2 = self.modules['Chroma'](
                 collection_name="knowledge2_collection",
-                embedding_function=embeddings_openai,
+                embedding_function=embeddings_openai,  # Changed from embeddings_ollama
                 persist_directory=vector_db2_path
             )
 
@@ -274,73 +291,79 @@ class RAGServiceNode(Node):
         class GradeDocuments(self.modules['BaseModel']):
             """Binary score for relevance check on retrieved documents."""
             binary_score: str = self.modules['Field'](
-                description="Documents are relevant to the question, 'yes' or 'no'"
+                description="Los documentos son relevantes a la pregunta, 'si' o 'no'"
             )
 
         class TaskDistinction(self.modules['BaseModel']):
             """Binary score for task distinction that needs to be ran"""
             dynamic_skill: str = self.modules['Field'](
-                description="Will you need to consult the vector database in order to get the information you need." \
-                " The vector database is filled with information like how I met my friend el inmortal . Answer exclusively with "
-                " 'no'. If I reference in any way a character named inmortal please do put 'yes' in this part. I also talk a little bit about myself in this vector store" \
-                "My name is Luis ALvaro Rosales Salazar so if I mention Luis put yes, also even if just the word inmortal is present." \
-                "I also have a second vector store, this vector store talks about the products that Reflex , a company specializing in selling customers and enterprises" \
-                "construction goods like glue or cement, has. If at any point I mention reflex or anything pertaining to construction please answer yes since I am going to" \
-                "need to consult this vector database"
+                description="¿La pregunta menciona o requiere información sobre cualquiera de estos temas: "
+                "1. 'El inmortal' o Luis Alvaro Rosales Salazar "
+                "2. Reflex, cemento, pegamento, o productos de construcción? "
+                "Si la pregunta menciona CUALQUIERA de estas palabras clave: inmortal, Luis, Alvaro, Rosales, Salazar, Reflex, cemento, pegamento, construcción, productos - responde 'si'. "
+                "IMPORTANTE: Si detectas las palabras 'inmortal', 'Luis', 'Reflex' o 'reflex' en la pregunta, SIEMPRE responde 'si'. "
+                "Solo responde 'no' si la pregunta es sobre matemáticas, conversación general, o temas completamente diferentes. "
+                "Responde SOLO 'si' o 'no'."
             )
             static_skill: str = self.modules['Field'](
-                description="Will you use any of these skills, current time or current date. Answer with 'yes' or 'no' and only answer yes if youre very sure that thats what the user wants."
+                description="¿La pregunta requiere información de hora o fecha actual? "
+                "Responde SOLO 'si' o 'no'. "
+                "Solo responde 'si' si el usuario explícitamente pregunta por la hora o fecha actual."
             )
 
         class VectorStoreDistinction(self.modules['BaseModel']):
             """Binary score for vector store distinction between these different vector stores."""
             inmortalVector: str = self.modules['Field'](
-                description="This vector database has information pertaining to a character named El inmortal and his various exploits as well as" \
-                "some personal information about the author Luis Alvaro Rosales Salazar. Only answer with yes or no if youre absolutely sure you need to consult this vector database. Be very sure of your answer as for the values in this " \
-                "output object will be mutually exclusive."
+                description="¿La pregunta menciona 'inmortal' (con mayúscula o minúscula) o 'Luis'? "
+                "IMPORTANTE: Si encuentras las palabras 'inmortal', 'Luis', 'Alvaro', 'Rosales' o 'Salazar' en CUALQUIER parte de la pregunta, SIEMPRE responde 'si'. "
+                "También incluye variantes como: 'el inmortal', 'immortal', 'Luis Alvaro', etc.  Tambien cualquier cosa que tenga algo que ver con esto."
+                "De lo contrario responde 'no'. "
+                "Responde SOLO 'si' o 'no'."
             )
             reflexVector: str = self.modules['Field'](
-                description="This vector database has information pertaining to reflex products and inventory. Reflex is a company specializing in making construction goods and it also " \
-                "sells customer goods like glue. Answer exclusively with yes or no  to the question of do you think we need to search this specific vector store to return the " \
-                "appropiate answer to the user. Be very sure of your answer since you can only consult one vector store. If even the name of reflex is mentioned or if anything pertaining to construction" \
-                "is mentioned you should use this vector store"
+                description="¿La pregunta menciona 'Reflex' (con mayúscula o minúscula) o productos de construcción? "
+                "IMPORTANTE: Si encuentras la palabra 'Reflex' o 'reflex' en CUALQUIER parte de la pregunta, SIEMPRE responde 'si'. "
+                "También responde 'si' si detectas: cemento, pegamento, construcción, productos, mortero, adhesivo. Tambien cualquier cosa que tenga que ver con construccion"
+                "De lo contrario responde 'no'. "
+                "Responde SOLO 'si' o 'no'."
             )
 
         # Task distinction grader
         structured_llm_task_dist = self.llm.with_structured_output(TaskDistinction)
-        system_task_distinction = """You are an expert at identifying the type of skills or movements an llm must make in order to answer
-a users question. You must answer yes or no to each of the questions I present to you and only say yes if youre absolutely sure. If the question ends
-up using both """
+        system_task_distinction = """Eres un experto en identificar el tipo de habilidades o movimientos que un LLM debe hacer para responder
+la pregunta de un usuario. IMPORTANTE: Solo puedes responder EXCLUSIVAMENTE con las palabras 'si' o 'no'. No proporciones explicaciones,
+no uses otras palabras. SOLO 'si' o 'no' para cada campo."""
 
         task_distinction_prompt = self.modules['ChatPromptTemplate'].from_messages([
             ("system", system_task_distinction),
-            ("human", "Question: {question}")
+            ("human", "Pregunta: {question}")
         ])
 
         self.task_grader = task_distinction_prompt | structured_llm_task_dist
 
         # Document relevance grader
         structured_llm_grader = self.llm.with_structured_output(GradeDocuments)
-        system = """You are a grader assessing relevance of a retrieved document to a user question. \n
-    If the document contains keyword(s) or semantic meaning related to the question, grade it as relevant. \n
-    Give a binary score 'yes' or 'no' score to indicate whether the document is relevant to the question."""
+        system = """Eres un evaluador que determina la relevancia de un documento recuperado a la pregunta de un usuario. \n
+    Si crees que el documento sera util para responder la pregunta del usuario responde con si, si crees que no sera util responde con un no. Se leniente y trata de responder si mas que no
+    No importa que el documento no tenga todo, solo importa que tenga una parte de la pregunta o que tenga algo que ver. \n
+    IMPORTANTE: Solo puedes responder EXCLUSIVAMENTE con 'si' o 'no'. No proporciones explicaciones. SOLO 'si' o 'no'."""
 
         grade_prompt = self.modules['ChatPromptTemplate'].from_messages([
             ("system", system),
-            ("human", "Retrieved document: \n\n {document} \n\n User question: {question}"),
+            ("human", "Documento recuperado: \n\n {document} \n\n Pregunta del usuario: {question}"),
         ])
 
         self.retrieval_grader = grade_prompt | structured_llm_grader
 
         # Vector store router
         structured_llm_vector = self.llm.with_structured_output(VectorStoreDistinction)
-        system_vector_dist = """You are an expert at routing questions to the appropriate vector database.
-You have access to two vector databases and must choose exactly one based on the question content.
-Answer with 'yes' or 'no' for each database, ensuring only one gets 'yes'."""
+        system_vector_dist = """Eres un experto en dirigir preguntas a la base de datos vectorial apropiada.
+Tienes acceso a dos bases de datos vectoriales y debes elegir exactamente una basándote en el contenido de la pregunta.
+IMPORTANTE: Solo puedes responder EXCLUSIVAMENTE con 'si' o 'no' para cada campo. No proporciones explicaciones. SOLO 'si' o 'no'."""
 
         vectorDistPrompt = self.modules['ChatPromptTemplate'].from_messages([
             ("system", system_vector_dist),
-            ("human", "Question: {question}")
+            ("human", "Pregunta: {question}")
         ])
 
         self.vector_store_grader = vectorDistPrompt | structured_llm_vector
@@ -362,7 +385,16 @@ Pregunta original: {question}
 Consulta optimizada para BM25:"""
 
         prompt_bm25 = self.modules['ChatPromptTemplate'].from_template(template_bm25)
-        self.generate_bm25_query = prompt_bm25 | self.modules['ChatOpenAI'](temperature=0) | self.modules['StrOutputParser']()
+        self.generate_bm25_query = prompt_bm25 | self.llm | self.modules['StrOutputParser']()
+
+        # Query Improvement for RAG Efficiency
+        template_improvement = """Eres un experto en mejorar las preguntas para poder perform rag en esa pregunta, no pierdas el contexto ni las palabras clave 
+        pero si mejoralo si es necesario. Esta es la pregunta original:{question}
+
+Devuelve la pregunta mejorada"""
+
+        prompt_improvement = self.modules['ChatPromptTemplate'].from_template(template_improvement)
+        self.improve_query = prompt_improvement | self.llm | self.modules['StrOutputParser']()
 
         # Step Back Prompting for query generation
         template = """Eres un asistente de modelo de lenguaje de IA. Tu tarea es generar 3
@@ -374,9 +406,9 @@ Proporciona estas preguntas alternativas separadas por saltos de línea. Pregunt
         prompt_perspectives = self.modules['ChatPromptTemplate'].from_template(template)
         self.generate_queries = (
             prompt_perspectives
-            | self.modules['ChatOpenAI'](temperature=0)
+            | self.llm
             | self.modules['StrOutputParser']()
-            | (lambda x: x.split("\n"))
+            | (lambda x: [q.strip() for q in x.split("\n") if q.strip()])
         )
 
         # Final RAG prompt
@@ -427,6 +459,7 @@ Proporciona estas preguntas alternativas separadas por saltos de línea. Pregunt
             for doc, score in sorted(fused_scores.items(), key=lambda x: x[1], reverse=True)
         ]
 
+
         return reranked_results
 
     def _grade_docs_final(self, docs, question):
@@ -439,7 +472,7 @@ Proporciona estas preguntas alternativas separadas por saltos de línea. Pregunt
                 "document": doc.page_content
             })
 
-            if score.binary_score == "yes":
+            if score.binary_score == "si":
                 self.get_logger().info("Document is relevant")
                 filtered_docs.append(doc)
             else:
@@ -449,7 +482,15 @@ Proporciona estas preguntas alternativas separadas por saltos de línea. Pregunt
 
     def _hybrid_retrieval(self, query_input, vector_store_choice):
         """Perform hybrid retrieval using both BM25 and vector search."""
-        question = query_input["question"]
+        original_question = query_input["question"]
+
+        # STEP 1: Query Improvement - Improve the original question for better RAG efficiency
+        self.get_logger().info(f'Original question: {original_question}')
+        question = self.improve_query.invoke({"question": original_question})
+        self.get_logger().info(f'Improved question: {question}')
+
+        # Update query_input to use improved question for all downstream processing
+        query_input = {"question": question}
 
         if vector_store_choice == "vector1":
             retriever = self.retriever1
@@ -458,12 +499,12 @@ Proporciona estas preguntas alternativas separadas por saltos de línea. Pregunt
             retriever = self.retriever2
             bm25_retriever = self.bm25_retriever2
 
-        # BM25 retrieval
+        # STEP 2: BM25 retrieval - Uses improved question
         bm25_query = self.generate_bm25_query.invoke({"question": question})
         self.get_logger().info(f'BM25 query: {bm25_query}')
         bm25_docs = bm25_retriever.invoke(bm25_query)
 
-        # Vector search - use a lambda to log the generated questions
+        # STEP 3: Vector search - Uses improved question for step-back prompting
         def debug_queries(queries):
             self.get_logger().info(f'Generated {len(queries)} question variations:')
             for i, q in enumerate(queries, 1):
@@ -475,51 +516,64 @@ Proporciona estas preguntas alternativas separadas por saltos de línea. Pregunt
         vector_docs = [doc for doc_list in vector_docs for doc in doc_list]
         self.get_logger().info(f'Vector search retrieved {len(vector_docs)} documents')
 
-        # Combine both sets of documents
+        # STEP 4: Combine both sets of documents using RRF
         self.get_logger().info(f'BM25 docs: {len(bm25_docs)}, Vector docs: {len(vector_docs)}')
         combined_docs = [bm25_docs, vector_docs]
         scored_docs = self._reciprocal_rank_fusion(combined_docs)
         self.get_logger().info(f'After RRF fusion: {len(scored_docs)} unique documents')
 
+        # STEP 5: Grade documents using the improved question
         all_docs = [doc for doc, score in scored_docs]
         self.get_logger().info(f'Grading {len(all_docs)} documents...')
         filtered_docs = self._grade_docs_final(all_docs, question)
         self.get_logger().info(f'After grading: {len(filtered_docs)} relevant documents')
 
-        return filtered_docs
+        # Return both filtered docs and improved question for final answer generation
+        return {"docs": filtered_docs, "improved_question": question}
 
     def _create_rag_response(self, question, vector_store_choice):
         """Create a RAG response for the given question."""
-        def parameterized_hybrid_retrieval(query_input):
-            return self._hybrid_retrieval(query_input, vector_store_choice)
+        # Perform hybrid retrieval which returns both docs and improved question
+        retrieval_result = self._hybrid_retrieval({"question": question}, vector_store_choice)
+        filtered_docs = retrieval_result["docs"]
+        improved_question = retrieval_result["improved_question"]
 
-        final_rag_chain = (
-            {"context": self.modules['RunnableLambda'](parameterized_hybrid_retrieval) | self.modules['RunnableLambda'](self._format_docs),
-             "question": self.modules['itemgetter']("question")}
-            | self.prompt
+        # Format the documents for context
+        context = self._format_docs(filtered_docs)
+
+        # Use the improved question with the retrieved documents for final answer
+        self.get_logger().info(f'Generating final answer using improved question: {improved_question}')
+        final_answer = (
+            self.prompt
             | self.llm
             | self.modules['StrOutputParser']()
-        )
+        ).invoke({"context": context, "question": improved_question})
 
-        return final_rag_chain.invoke({"question": question})
+        return final_answer
 
     def _handle_static_skills(self, question):
         """Handle questions that require static skills - provide all available info."""
-        context = f"""Available static information:
-    Current time: {self.current_time}
-    Current date: {self.current_date}"""
+        # STEP 1: Query Improvement - Improve the original question for better RAG efficiency
+        original_question = question
+        self.get_logger().info(f'Original question: {original_question}')
+        improved_question = self.improve_query.invoke({"question": original_question})
+        self.get_logger().info(f'Improved question: {improved_question}')
+
+        context = f"""Información estática disponible:
+    Hora actual: {self.current_time}
+    Fecha actual: {self.current_date}"""
 
         static_prompt = self.modules['ChatPromptTemplate'].from_template(
-            """Answer the user's question using the provided information.
+            """Responde la pregunta del usuario usando la información proporcionada.
 
     {context}
 
-    Question: {question}
+    Pregunta: {question}
     """
         )
 
         static_chain = static_prompt | self.llm | self.modules['StrOutputParser']()
-        return static_chain.invoke({"context": context, "question": question})
+        return static_chain.invoke({"context": context, "question": improved_question})
 
     def _route_question(self, question):
         """Route the question to the appropriate handler and return the answer."""
@@ -534,30 +588,37 @@ Proporciona estas preguntas alternativas separadas por saltos de línea. Pregunt
         self.get_logger().info(f'Dynamic skill needed: {task_result.dynamic_skill}')
         self.get_logger().info(f'Static skill needed: {task_result.static_skill}')
 
-        if task_result.dynamic_skill == "yes":
+
+
+        if task_result.dynamic_skill == "si" or task_result.dynamic_skill == "Si":
             self.get_logger().info('Routing to RAG chain')
             vector_result = self.vector_store_grader.invoke({"question": question})
             self.get_logger().info(f'Inmortal vector: {vector_result.inmortalVector}')
             self.get_logger().info(f'Reflex Vector: {vector_result.reflexVector}')
 
-            if vector_result.inmortalVector == "yes":
+            if vector_result.inmortalVector == "si" or vector_result.inmortalVector == "Si":
                 self.get_logger().info('Routing to Inmortal Vector Store')
                 answer = self._create_rag_response(question, "vector1")
-            elif vector_result.reflexVector == "yes":
+            elif vector_result.reflexVector == "si" or vector_result.reflexVector == "Si":
                 self.get_logger().info('Routing to Reflex Vector Store')
                 answer = self._create_rag_response(question, "vector2")
             else:
                 self.get_logger().info('No specific vector store selected, defaulting to vector store 1')
                 answer = self._create_rag_response(question, "vector1")
 
-        elif task_result.static_skill == "yes":
+        elif task_result.static_skill == "si" or task_result.static_skill == "si":
             self.get_logger().info('Routing to static skills')
             answer = self._handle_static_skills(question)
         else:
             self.get_logger().info('Routing to basic LLM')
-            basic_prompt = self.modules['ChatPromptTemplate'].from_template("Answer this question: {question}")
+            original_question = question
+            self.get_logger().info(f'Original question: {original_question}')
+            improved_question = self.improve_query.invoke({"question": original_question})
+            self.get_logger().info(f'Improved question: {improved_question}')
+
+            basic_prompt = self.modules['ChatPromptTemplate'].from_template("Responde esta pregunta: {question}")
             basic_chain = basic_prompt | self.llm | self.modules['StrOutputParser']()
-            answer = basic_chain.invoke({"question": question})
+            answer = basic_chain.invoke({"question": improved_question})
 
         # Cache the answer
         self.cache_manager.cache_qa_pair(question, answer)
@@ -627,3 +688,4 @@ def main(args=None):
 
 if __name__ == '__main__':
     main()
+

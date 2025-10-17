@@ -28,7 +28,6 @@ RUN pip3 install --no-cache-dir \
     langchain-openai \
     langchain-chroma \
     langchain-text-splitters \
-    openai \
     chromadb \
     pypdf \
     python-dotenv \
@@ -36,6 +35,9 @@ RUN pip3 install --no-cache-dir \
     rank_bm25 \
     pydantic \
     tiktoken
+    # OLLAMA PACKAGES (COMMENTED OUT - NOW USING CHATGPT/OPENAI):
+    # langchain-ollama \
+    # ollama
 
 # Create workspace
 WORKDIR /ros2_ws

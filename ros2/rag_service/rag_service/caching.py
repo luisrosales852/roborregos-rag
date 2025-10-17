@@ -97,7 +97,7 @@ class RAGCacheManager:
         
         if keys_to_delete:
             self.redis_client.delete(*keys_to_delete)
-            print(f"🧹 Deleted {len(keys_to_delete)} Q&A cache entries")
+            print(f"Deleted {len(keys_to_delete)} Q&A cache entries")
         else:
             print("No Q&A cache entries to delete")
     

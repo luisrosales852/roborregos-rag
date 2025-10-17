@@ -1,18 +1,4 @@
-#!/usr/bin/env python3
-"""
-RAG Service Client Example
 
-This is an example client node that demonstrates how to use the RAG service.
-It sends queries to the RAG service and prints the responses.
-
-Usage:
-    ros2 run rag_service rag_client_example
-
-    Or to ask a specific question:
-    ros2 run rag_service rag_client_example "What is Reflex?"
-
-Author: Generated for RoboRregos RAG Application
-"""
 
 import rclpy
 from rclpy.node import Node
