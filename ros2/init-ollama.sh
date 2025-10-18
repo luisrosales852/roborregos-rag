@@ -1,26 +1,29 @@
 #!/bin/bash
-# Script to initialize Ollama with the required model
-# THIS SCRIPT IS COMMENTED OUT - NOW USING CHATGPT/OPENAI INSTEAD OF OLLAMA
+# Script to initialize Ollama with llama3.1:8b and gemma:300m models
 # This should be run after the Ollama container is up
 
-# set -e
-#
-# OLLAMA_HOST=${OLLAMA_HOST:-"http://localhost:11434"}
-# MODEL=${OLLAMA_MODEL:-"llama3.1:8b"}
-#
-# echo "Waiting for Ollama to be ready..."
-# until curl -sf "$OLLAMA_HOST/api/health" > /dev/null; do
-#     echo "Waiting for Ollama service..."
-#     sleep 2
-# done
-#
-# echo "Ollama is ready!"
-# echo "Pulling model: $MODEL"
-# curl -X POST "$OLLAMA_HOST/api/pull" -d "{\"name\": \"$MODEL\"}"
-#
-# echo ""
-# echo "Model $MODEL has been pulled successfully!"
-# echo "You can now start using the RAG service."
+set -e
 
-echo "This script is no longer needed - the RAG service now uses ChatGPT/OpenAI API."
-echo "Make sure your OPENAI_API_KEY is set in the .env file."
+OLLAMA_HOST=${OLLAMA_HOST:-"http://localhost:11434"}
+LLM_MODEL=${OLLAMA_LLM_MODEL:-"llama3.1:8b"}
+EMBEDDING_MODEL=${OLLAMA_EMBEDDING_MODEL:-"gemma:300m"}
+
+echo "Waiting for Ollama to be ready..."
+until curl -sf "$OLLAMA_HOST/api/tags" > /dev/null 2>&1; do
+    echo "Waiting for Ollama service..."
+    sleep 2
+done
+
+echo "Ollama is ready!"
+echo "Pulling LLM model: $LLM_MODEL (this may take a while, ~8GB download)"
+ollama pull "$LLM_MODEL"
+
+echo ""
+echo "Pulling embedding model: $EMBEDDING_MODEL (this may take a while, ~300MB download)"
+ollama pull "$EMBEDDING_MODEL"
+
+echo ""
+echo "Both models have been pulled successfully!"
+echo "  - LLM (chat): $LLM_MODEL"
+echo "  - Embeddings: $EMBEDDING_MODEL"
+echo "You can now start using the RAG service with these models."

@@ -25,7 +25,7 @@ RUN apt-get update && apt-get install -y \
 RUN pip3 install --no-cache-dir \
     langchain \
     langchain-community \
-    langchain-openai \
+    langchain-ollama \
     langchain-chroma \
     langchain-text-splitters \
     chromadb \
@@ -34,10 +34,8 @@ RUN pip3 install --no-cache-dir \
     redis \
     rank_bm25 \
     pydantic \
-    tiktoken
-    # OLLAMA PACKAGES (COMMENTED OUT - NOW USING CHATGPT/OPENAI):
-    # langchain-ollama \
-    # ollama
+    tiktoken \
+    ollama
 
 # Create workspace
 WORKDIR /ros2_ws

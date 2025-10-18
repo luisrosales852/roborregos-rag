@@ -75,15 +75,15 @@ class RAGServiceNode(Node):
 
             # Get environment variables
             self.redis_url = os.getenv("REDIS_URL", "redis://localhost:6379")
-            # OLLAMA CONFIGURATION (COMMENTED OUT - NOW USING CHATGPT/OPENAI)
-            # self.ollama_base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
-            # self.ollama_model = os.getenv("OLLAMA_MODEL", "llama3.1:8b")
-            # ChatGPT/OpenAI configuration
-            self.openai_api_key = os.getenv("OPENAI_API_KEY")
+            # OLLAMA CONFIGURATION - Separate models for LLM and embeddings
+            self.ollama_base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+            self.ollama_llm_model = os.getenv("OLLAMA_LLM_MODEL", "llama3.1:8b")
+            self.ollama_embedding_model = os.getenv("OLLAMA_EMBEDDING_MODEL", "gemma:300m")
             self.get_logger().info(f'Redis URL: {self.redis_url}')
-            # self.get_logger().info(f'Ollama Base URL: {self.ollama_base_url}')
-            # self.get_logger().info(f'Ollama Model: {self.ollama_model}')
-            self.get_logger().info('Using ChatGPT (OpenAI) for LLM and embeddings')
+            self.get_logger().info(f'Ollama Base URL: {self.ollama_base_url}')
+            self.get_logger().info(f'Ollama LLM Model: {self.ollama_llm_model}')
+            self.get_logger().info(f'Ollama Embedding Model: {self.ollama_embedding_model}')
+            self.get_logger().info('Using Ollama with llama3.1:8b for LLM and gemma:300m for embeddings')
 
             # Import all necessary modules from main.py
             import re
@@ -91,10 +91,8 @@ class RAGServiceNode(Node):
             from langchain.text_splitter import RecursiveCharacterTextSplitter
             from langchain_core.output_parsers import StrOutputParser
             from langchain_core.runnables import RunnablePassthrough, RunnableLambda
-            # OLLAMA IMPORTS (COMMENTED OUT)
-            # from langchain_ollama import ChatOllama, OllamaEmbeddings
-            # OPENAI IMPORTS
-            from langchain_openai import ChatOpenAI, OpenAIEmbeddings
+            # OLLAMA IMPORTS - llama3.1:8b for LLM, gemma:300m for embeddings
+            from langchain_ollama import ChatOllama, OllamaEmbeddings
             from langchain_chroma import Chroma
             from langchain_community.document_loaders import PyPDFLoader
             from langchain_text_splitters import CharacterTextSplitter
@@ -116,12 +114,9 @@ class RAGServiceNode(Node):
                 'StrOutputParser': StrOutputParser,
                 'RunnablePassthrough': RunnablePassthrough,
                 'RunnableLambda': RunnableLambda,
-                # OLLAMA MODULES (COMMENTED OUT)
-                # 'ChatOllama': ChatOllama,
-                # 'OllamaEmbeddings': OllamaEmbeddings,
-                # OPENAI MODULES
-                'ChatOpenAI': ChatOpenAI,
-                'OpenAIEmbeddings': OpenAIEmbeddings,
+                # OLLAMA MODULES - llama3.1:8b (LLM) + gemma:300m (embeddings)
+                'ChatOllama': ChatOllama,
+                'OllamaEmbeddings': OllamaEmbeddings,
                 'Chroma': Chroma,
                 'PyPDFLoader': PyPDFLoader,
                 'CharacterTextSplitter': CharacterTextSplitter,
@@ -167,16 +162,10 @@ class RAGServiceNode(Node):
             self.current_time = self.modules['datetime'].now().time()
             self.current_date = self.modules['date'].today()
 
-            # Initialize LLM with ChatGPT/OpenAI
-            # OLLAMA VERSION (COMMENTED OUT):
-            # self.llm = self.modules['ChatOllama'](
-            #     model=self.ollama_model,
-            #     base_url=self.ollama_base_url,
-            #     temperature=0
-            # )
-            # CHATGPT/OPENAI VERSION (ACTIVE):
-            self.llm = self.modules['ChatOpenAI'](
-                model_name="gpt-4o-mini",
+            # Initialize LLM with Ollama llama3.1:8b
+            self.llm = self.modules['ChatOllama'](
+                model=self.ollama_llm_model,
+                base_url=self.ollama_base_url,
                 temperature=0
             )
 
@@ -192,17 +181,12 @@ class RAGServiceNode(Node):
             docs1 = loader1.load()
             docs2 = loader2.load()
 
-            # Initialize embeddings with ChatGPT/OpenAI
-            # OLLAMA VERSION (COMMENTED OUT):
-            # embeddings_ollama = self.modules['OllamaEmbeddings'](
-            #     model=self.ollama_model,
-            #     base_url=self.ollama_base_url
-            # )
-            # CHATGPT/OPENAI VERSION (ACTIVE):
-            embeddings_openai = self.modules['OpenAIEmbeddings'](
-                model="text-embedding-3-large"
+            # Initialize embeddings with Ollama gemma:300m
+            embeddings_ollama = self.modules['OllamaEmbeddings'](
+                model=self.ollama_embedding_model,
+                base_url=self.ollama_base_url
             )
-            embeddings_openai = self.cache_manager.setup_cached_embeddings(embeddings_openai)
+            embeddings_ollama = self.cache_manager.setup_cached_embeddings(embeddings_ollama)
 
             # Split documents
             chunk_size = self.get_parameter('chunk_size').value
@@ -236,13 +220,13 @@ class RAGServiceNode(Node):
 
             self.vectorstore1 = self.modules['Chroma'](
                 collection_name="knowledge1_collection",
-                embedding_function=embeddings_openai,  # Changed from embeddings_ollama
+                embedding_function=embeddings_ollama,
                 persist_directory=vector_db1_path
             )
 
             self.vectorstore2 = self.modules['Chroma'](
                 collection_name="knowledge2_collection",
-                embedding_function=embeddings_openai,  # Changed from embeddings_ollama
+                embedding_function=embeddings_ollama,
                 persist_directory=vector_db2_path
             )
 
@@ -301,7 +285,8 @@ class RAGServiceNode(Node):
                 "1. 'El inmortal' o Luis Alvaro Rosales Salazar "
                 "2. Reflex, cemento, pegamento, o productos de construcción? "
                 "Si la pregunta menciona CUALQUIERA de estas palabras clave: inmortal, Luis, Alvaro, Rosales, Salazar, Reflex, cemento, pegamento, construcción, productos - responde 'si'. "
-                "IMPORTANTE: Si detectas las palabras 'inmortal', 'Luis', 'Reflex' o 'reflex' en la pregunta, SIEMPRE responde 'si'. "
+                "IMPORTANTE: Si detectas las palabras 'inmortal', 'Luis', 'Reflex' o 'reflex' en la pregunta, SIEMPRE responde 'si'. " \
+                "Tambien responde que si si es que piensas que el contexto de la pregunta va por el rumbo de esas palabras clave"
                 "Solo responde 'no' si la pregunta es sobre matemáticas, conversación general, o temas completamente diferentes. "
                 "Responde SOLO 'si' o 'no'."
             )
