@@ -87,7 +87,6 @@ class RAGServiceNode(Node):
 
             # Import all necessary modules from main.py
             import re
-            from langchain import hub
             from langchain.text_splitter import RecursiveCharacterTextSplitter
             from langchain_core.output_parsers import StrOutputParser
             from langchain_core.runnables import RunnablePassthrough, RunnableLambda

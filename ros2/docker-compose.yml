@@ -1,5 +1,12 @@
 version: '3.8'
 
+# NVIDIA GPU Support for Ollama:
+# Prerequisites:
+#   1. Install NVIDIA Docker runtime: https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html
+#   2. On Windows with WSL2: Install NVIDIA drivers for WSL2
+#   3. Verify with: docker run --rm --gpus all nvidia/cuda:11.8.0-base-ubuntu22.04 nvidia-smi
+# The ollama service is configured to use all available NVIDIA GPUs for faster inference.
+
 services:
   # Redis service for caching
   redis:
@@ -28,6 +35,13 @@ services:
       - ollama_data:/root/.ollama
     networks:
       - rag_network
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
     healthcheck:
       test: ["CMD", "sh", "-c", "ollama list | grep -q 'llama3.1:8b' && ollama list | grep -q 'embeddinggemma:300m'"]
       interval: 10s
