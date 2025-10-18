@@ -87,23 +87,24 @@ class RAGServiceNode(Node):
 
             # Import all necessary modules from main.py
             import re
-            from langchain.text_splitter import RecursiveCharacterTextSplitter
+            import redis
+            from langchain_text_splitters import RecursiveCharacterTextSplitter
             from langchain_core.output_parsers import StrOutputParser
             from langchain_core.runnables import RunnablePassthrough, RunnableLambda
-            # OLLAMA IMPORTS - llama3.1:8b for LLM, gemma:300m for embeddings
             from langchain_ollama import ChatOllama, OllamaEmbeddings
             from langchain_chroma import Chroma
             from langchain_community.document_loaders import PyPDFLoader
             from langchain_text_splitters import CharacterTextSplitter
             from langchain_core.documents import Document
-            from langchain.prompts import ChatPromptTemplate
-            from langchain.load import dumps, loads
+            from langchain_core.prompts import ChatPromptTemplate
+            from langchain_core.load.dump import dumps
+            from langchain_core.load.load import loads
             from operator import itemgetter
             from langchain_community.retrievers import BM25Retriever
             from datetime import datetime, date
             from pydantic import BaseModel, Field
-            from rag_service.caching import RAGCacheManager  # Import from package caching.py
-            from langchain.globals import set_llm_cache
+            from rag_service.caching import RAGCacheManager
+            from langchain_core.globals import set_llm_cache
             from langchain_community.cache import RedisCache
 
             # Store imports as instance variables for later use

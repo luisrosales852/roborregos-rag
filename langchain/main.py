@@ -23,7 +23,7 @@ from langchain_community.retrievers import BM25Retriever
 from datetime import datetime, date
 from pydantic import BaseModel, Field
 from caching import RAGCacheManager
-from langchain.globals import set_llm_cache
+from langchain_core.globals import set_llm_cache
 from langchain_community.cache import RedisCache
 
 #Setting llm cache?

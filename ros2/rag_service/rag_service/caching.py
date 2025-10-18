@@ -4,9 +4,10 @@ import pickle
 from typing import Optional, Dict
 import redis
 from langchain_community.cache import RedisCache
-from langchain.globals import set_llm_cache
+from langchain_core.globals import set_llm_cache
 from langchain_community.storage import RedisStore
 from langchain.embeddings import CacheBackedEmbeddings
+
 class RAGCacheManager:
     def __init__(self, 
                  redis_url = "redis://localhost:6379",
