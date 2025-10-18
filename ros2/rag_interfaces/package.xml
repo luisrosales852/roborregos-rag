@@ -5,7 +5,7 @@
   <version>1.0.0</version>
   <description>Custom ROS2 interfaces for RAG service</description>
 
-  <maintainer email="A01255674@tec.mx">RoboRregos Team</maintainer>
+  <maintainer email="A01255674@tec.mx">Roborregos Team</maintainer>
   <license>MIT</license>
 
   <buildtool_depend>ament_cmake</buildtool_depend>

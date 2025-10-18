@@ -28,7 +28,7 @@ class RAGCacheManager:
             print("Redis connection failed - make sure Redis is running")
             raise
         
-        # Set up embeddings store with Redis (this caches embeddings automatically)
+        # Set up embeddings store with Redis
         self.embeddings_store = RedisStore(
             client=self.redis_client,
             namespace="embeddings"
