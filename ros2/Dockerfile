@@ -37,6 +37,8 @@ RUN pip3 install --no-cache-dir \
     tiktoken \
     ollama
 
+    # Add --upgrade to your pip install command
+RUN pip install --upgrade langchain langchain-core
 # Create workspace
 WORKDIR /ros2_ws
 
