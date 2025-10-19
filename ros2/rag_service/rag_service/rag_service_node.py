@@ -434,17 +434,25 @@ Proporciona estas preguntas alternativas separadas por saltos de línea. Pregunt
         """Format documents for context."""
         return "\n\n".join([doc.page_content for doc in docs])
 
-    def _deduplicate_documents(self, results):
-        """Deduplicate documents from multiple retrieval sources (BM25 and vector search)."""
-        seen_docs = {}
+    def _reciprocal_rank_fusion(self, results, k=60):
+        """Reciprocal rank fusion for combining multiple ranked document lists."""
+        fused_scores = {}
 
-        for docs in results:
-            for doc in docs:
+        for id_list, docs in enumerate(results):
+            for rank, doc in enumerate(docs):
                 doc_str = self.modules['dumps'](doc)
-                if doc_str not in seen_docs:
-                    seen_docs[doc_str] = doc
+                score_docs = 1/(rank+k)
+                if doc_str not in fused_scores:
+                    fused_scores[doc_str] = 0
+                fused_scores[doc_str] += score_docs
 
-        return list(seen_docs.values())
+        reranked_results = [
+            (self.modules['loads'](doc), score)
+            for doc, score in sorted(fused_scores.items(), key=lambda x: x[1], reverse=True)
+        ]
+
+
+        return reranked_results
 
     def _grade_docs_final(self, docs, question):
         """Grade and filter documents using LLM structured output."""
@@ -500,13 +508,14 @@ Proporciona estas preguntas alternativas separadas por saltos de línea. Pregunt
         vector_docs = [doc for doc_list in vector_docs for doc in doc_list]
         self.get_logger().info(f'Vector search retrieved {len(vector_docs)} documents')
 
-        # STEP 4: Deduplicate documents from both retrieval methods
+        # STEP 4: Combine both sets of documents using RRF
         self.get_logger().info(f'BM25 docs: {len(bm25_docs)}, Vector docs: {len(vector_docs)}')
         combined_docs = [bm25_docs, vector_docs]
-        all_docs = self._deduplicate_documents(combined_docs)
-        self.get_logger().info(f'After deduplication: {len(all_docs)} unique documents')
+        scored_docs = self._reciprocal_rank_fusion(combined_docs)
+        self.get_logger().info(f'After RRF fusion: {len(scored_docs)} unique documents')
 
         # STEP 5: Grade documents using the improved question
+        all_docs = [doc for doc, score in scored_docs]
         self.get_logger().info(f'Grading {len(all_docs)} documents...')
         filtered_docs = self._grade_docs_final(all_docs, question)
         self.get_logger().info(f'After grading: {len(filtered_docs)} relevant documents')
