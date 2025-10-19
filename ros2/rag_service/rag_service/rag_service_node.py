@@ -69,8 +69,8 @@ class RAGServiceNode(Node):
         try:
             # Import environment loading
             from dotenv import load_dotenv
-            # Load .env from package root
-            env_path = PACKAGE_ROOT / '.env'
+            # Load .env from ros2 folder (parent of package root)
+            env_path = PACKAGE_ROOT.parent / '.env'
             load_dotenv(dotenv_path=env_path)
 
             # Get environment variables
@@ -450,8 +450,6 @@ Proporciona estas preguntas alternativas separadas por saltos de línea. Pregunt
             (self.modules['loads'](doc), score)
             for doc, score in sorted(fused_scores.items(), key=lambda x: x[1], reverse=True)
         ]
-
-
         return reranked_results
 
     def _grade_docs_final(self, docs, question):

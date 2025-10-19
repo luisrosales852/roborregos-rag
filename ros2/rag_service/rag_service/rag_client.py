@@ -10,7 +10,7 @@ class RAGClientExample(Node):
 
     def __init__(self):
         """Initialize the RAG client node."""
-        super().__init__('rag_client_example')
+        super().__init__('rag_client')
 
         # Create a client for the RAG service
         self.client = self.create_client(RAGQuery, 'rag_query')

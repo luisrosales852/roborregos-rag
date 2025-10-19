@@ -24,7 +24,7 @@ setup(
     entry_points={
         'console_scripts': [
             'rag_service_node = rag_service.rag_service_node:main',
-            'rag_client_example = rag_service.rag_client_example:main',
+            'rag_client = rag_service.rag_client:main',
         ],
     },
 )

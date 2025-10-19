@@ -78,6 +78,8 @@ services:
       # Mount the package sources for development (optional)
       - ./rag_interfaces:/ros2_ws/src/rag_interfaces
       - ./rag_service:/ros2_ws/src/rag_service
+      # Mount .env file from ros2 folder
+      - ./.env:/ros2_ws/src/.env
       # Persist vector databases
       - vector_dbs:/ros2_ws/src/rag_service/data/vector_dbs
     networks:
@@ -100,7 +102,7 @@ services:
       - rag_network
     stdin_open: true
     tty: true
-    command: ros2 run rag_service rag_client_example
+    command: ros2 run rag_service rag_client
     profiles:
       - client  # Only start with: docker-compose --profile client up
 

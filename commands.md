@@ -1,5 +1,5 @@
 docker exec -it rag_service_node /ros2_entrypoint.sh bash
-ros2 run rag_service rag_client_example
+ros2 run rag_service rag_client
 
   docker exec -it rag_ollama ollama pull llama3.2
   
@@ -25,4 +25,4 @@ To Start Using It:
   communicate within the Docker network.
 
 
-    docker-compose restart rag_service
+  docker-compose restart rag_service

@@ -35,11 +35,9 @@ RUN pip3 install --no-cache-dir \
     rank_bm25 \
     pydantic \
     tiktoken
-    # OLLAMA PACKAGES (COMMENTED OUT - NOW USING CHATGPT/OPENAI):
     # langchain-ollama \
     # ollama
 
-# Create workspace
 WORKDIR /ros2_ws
 
 # Copy the ROS2 packages
