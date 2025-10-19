@@ -141,11 +141,6 @@ class RAGServiceNode(Node):
                 max_qa_pairs=10000
             )
 
-            # Get current time and date
-            self.current_time = self.modules['datetime'].now().time()
-            self.current_date = self.modules['date'].today()
-
-            # Initialize LLM with ChatGPT/OpenAI (ACTIVE)
             self.llm = self.modules['ChatOpenAI'](
                 model_name="gpt-4o-mini",
                 temperature=0
@@ -274,7 +269,7 @@ class RAGServiceNode(Node):
                 "IMPORTANTE: Si detectas las palabras 'inmortal', 'Luis', 'Reflex' o 'reflex' en la pregunta, SIEMPRE responde 'si'. " \
                 "Tambien responde que si si es que piensas que el contexto de la pregunta va por el rumbo de esas palabras clave o tenga algo que ver."
                 "Solo responde 'no' si la pregunta es sobre matemáticas, conversación general, o temas completamente diferentes. "
-                "Responde SOLO 'si' o 'no'."
+                "Responde SOLO 'si' o 'no'. Tambien si tiene algo que ver con pintar pon que si"
             )
             static_skill: str = self.modules['Field'](
                 description="¿La pregunta requiere información de hora o fecha actual? "
@@ -295,7 +290,7 @@ class RAGServiceNode(Node):
                 description="¿La pregunta menciona 'Reflex' (con mayúscula o minúscula) o productos de construcción? "
                 "IMPORTANTE: Si encuentras la palabra 'Reflex' o 'reflex' en CUALQUIER parte de la pregunta, SIEMPRE responde 'si'. "
                 "También responde 'si' si detectas: cemento, pegamento, construcción, productos, mortero, adhesivo. Tambien cualquier cosa que tenga que ver con construccion"
-                "De lo contrario responde 'no'. "
+                "De lo contrario responde 'no'. Tambien pon que si si tiene algo que ver con pintar "
                 "Responde SOLO 'si' o 'no'."
             )
 
@@ -316,8 +311,8 @@ no uses otras palabras. SOLO 'si' o 'no' para cada campo."""
         structured_llm_grader = self.llm.with_structured_output(GradeDocuments)
         system = """Eres un evaluador que determina la relevancia de un documento recuperado a la pregunta de un usuario. \n
     Si crees que el documento sera util para responder la pregunta del usuario responde con si, si crees que no sera util responde con un no. Se leniente y trata de responder si mas que no
-    No importa que el documento no tenga todo, solo importa que tenga una parte de la pregunta o que tenga algo que ver. \n
-    IMPORTANTE: Solo puedes responder EXCLUSIVAMENTE con 'si' o 'no'. No proporciones explicaciones. SOLO 'si' o 'no'."""
+    No importa que el documento no tenga todo, solo importa que tenga una parte de la pregunta o que tenga algo que ver. Si asignas una calificacion de 1 al 100 con que tenga un 10 pon que si. \n
+    IMPORTANTE: Solo puedes responder EXCLUSIVAMENTE con 'si' o 'no'. No proporciones explicaciones. SOLO 'si' o 'no'. Ten en cuenta que reflex es una compania"""
 
         grade_prompt = self.modules['ChatPromptTemplate'].from_messages([
             ("system", system),
@@ -330,7 +325,7 @@ no uses otras palabras. SOLO 'si' o 'no' para cada campo."""
         structured_llm_vector = self.llm.with_structured_output(VectorStoreDistinction)
         system_vector_dist = """Eres un experto en dirigir preguntas a la base de datos vectorial apropiada.
 Tienes acceso a dos bases de datos vectoriales y debes elegir exactamente una basándote en el contenido de la pregunta.
-IMPORTANTE: Solo puedes responder EXCLUSIVAMENTE con 'si' o 'no' para cada campo. No proporciones explicaciones. SOLO 'si' o 'no'."""
+IMPORTANTE: Solo puedes responder EXCLUSIVAMENTE con 'si' o 'no' para cada campo. No proporciones explicaciones. SOLO 'si' o 'no'. Ten en cuenta que reflex es una compania"""
 
         vectorDistPrompt = self.modules['ChatPromptTemplate'].from_messages([
             ("system", system_vector_dist),
@@ -359,12 +354,27 @@ Consulta optimizada para BM25:"""
         self.generate_bm25_query = prompt_bm25 | self.llm | self.modules['StrOutputParser']()
 
         # Query Improvement for RAG Efficiency
-        template_improvement = """Eres un experto en mejorar las preguntas para poder perform rag en esa pregunta, no pierdas el contexto ni las palabras clave 
-        pero si mejoralo si es necesario. Esta es la pregunta original, no la modifiques mucho y si ves una palabra que piensas que es otra cosa no le muevas, lo ultimo que quiero
-         es que cambies el contexto de la pregunta, especialmente si ves la palabra inmortal no lo cambies y no insinues nada, es un personaje en una base
-         de datos vectorial. Tu existes para evitar principalmente errores de ortografia o de logica graves:{question}
+        template_improvement = """Eres un experto en optimizar preguntas para búsqueda RAG (Retrieval-Augmented Generation).
 
-Devuelve la pregunta mejorada"""
+REGLAS ESTRICTAS:
+1. Conserva TODAS las palabras clave y entidades nombradas exactamente como aparecen
+2. NO cambies nombres propios, personajes, lugares o términos técnicos
+3. NO insinúes ni agregues información que no está en la pregunta original
+4. Mantén el 100% del contexto y la intención original
+
+TU ÚNICA TAREA:
+- Corrige errores ortográficos evidentes
+- Simplifica la sintaxis si es necesaria para la búsqueda
+- Extrae los conceptos clave en formato conciso
+- Elimina palabras de relleno innecesarias
+
+FORMATO DE SALIDA:
+Devuelve SOLO la pregunta optimizada, sin explicaciones adicionales. Tambien si detectas la palabra inmortal no insinues nada, es una persona que tiene informacion en mi base 
+de datos vectorial. Ten en cuenta que reflex es una compania
+
+Pregunta original: {question}
+
+Pregunta optimizada:"""
 
         prompt_improvement = self.modules['ChatPromptTemplate'].from_template(template_improvement)
         self.improve_query = prompt_improvement | self.llm | self.modules['StrOutputParser']()
@@ -415,26 +425,27 @@ Proporciona estas preguntas alternativas separadas por saltos de línea. Pregunt
         """Format documents for context."""
         return "\n\n".join([doc.page_content for doc in docs])
 
-    def _reciprocal_rank_fusion(self, results, k=60):
-        """Reciprocal rank fusion for combining multiple ranked document lists."""
-        fused_scores = {}
+    def deduplicate(self, results):
+        seen_docs = {}
+        deduplicated_results = []
 
         for id_list, docs in enumerate(results):
             for rank, doc in enumerate(docs):
-                doc_str = self.modules['dumps'](doc)
-                score_docs = 1/(rank+k)
-                if doc_str not in fused_scores:
-                    fused_scores[doc_str] = 0
-                fused_scores[doc_str] += score_docs
+                # Create a unique key based on content and source metadata
+                # This is more reliable than dumps() which might include object IDs
+                doc_key = (
+                    doc.page_content.strip(),  # The actual text content
+                    doc.metadata.get('source', ''),  # Source file
+                    doc.metadata.get('page', '')  # Page number if available
+                )
 
-        reranked_results = [
-            (self.modules['loads'](doc), score)
-            for doc, score in sorted(fused_scores.items(), key=lambda x: x[1], reverse=True)
-        ]
-        return reranked_results
+                if doc_key not in seen_docs:
+                    seen_docs[doc_key] = True
+                    deduplicated_results.append(doc)
+
+        return deduplicated_results
 
     def _grade_docs_final(self, docs, question):
-        """Grade and filter documents using LLM structured output."""
         filtered_docs = []
 
         for doc in docs:
@@ -490,11 +501,11 @@ Proporciona estas preguntas alternativas separadas por saltos de línea. Pregunt
         # STEP 4: Combine both sets of documents using RRF
         self.get_logger().info(f'BM25 docs: {len(bm25_docs)}, Vector docs: {len(vector_docs)}')
         combined_docs = [bm25_docs, vector_docs]
-        scored_docs = self._reciprocal_rank_fusion(combined_docs)
-        self.get_logger().info(f'After RRF fusion: {len(scored_docs)} unique documents')
+        all_docs = self.deduplicate(combined_docs)
+        self.get_logger().info(f'After deduplication: {len(all_docs)} unique documents')
 
         # STEP 5: Grade documents using the improved question
-        all_docs = [doc for doc, score in scored_docs]
+        
         self.get_logger().info(f'Grading {len(all_docs)} documents...')
         filtered_docs = self._grade_docs_final(all_docs, question)
         self.get_logger().info(f'After grading: {len(filtered_docs)} relevant documents')
@@ -512,8 +523,12 @@ Proporciona estas preguntas alternativas separadas por saltos de línea. Pregunt
         # Format the documents for context
         context = self._format_docs(filtered_docs)
 
-        # Use the improved question with the retrieved documents for final answer
+        # Log the final prompt components
         self.get_logger().info(f'Generating final answer using improved question: {improved_question}')
+        self.get_logger().info('FINAL PROMPT TO LLM:')
+        self.get_logger().info(f'Context ({len(filtered_docs)} documents):\n{context}')
+        self.get_logger().info(f'Question: {improved_question}')
+
         final_answer = (
             self.prompt
             | self.llm
@@ -530,9 +545,13 @@ Proporciona estas preguntas alternativas separadas por saltos de línea. Pregunt
         improved_question = self.improve_query.invoke({"question": original_question})
         self.get_logger().info(f'Improved question: {improved_question}')
 
+        # Get CURRENT time/date on each query, not initialization time
+        current_time = self.modules['datetime'].now().astimezone()
+        current_date = self.modules['date'].today()
+
         context = f"""Información estática disponible:
-    Hora actual: {self.current_time}
-    Fecha actual: {self.current_date}"""
+    Hora actual: {current_time}
+    Fecha actual: {current_date}"""
 
         static_prompt = self.modules['ChatPromptTemplate'].from_template(
             """Responde la pregunta del usuario usando la información proporcionada.

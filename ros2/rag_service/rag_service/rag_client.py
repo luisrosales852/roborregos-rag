@@ -41,9 +41,7 @@ class RAGClientExample(Node):
             return None
 
     def print_response(self, response):
-        print("\n" + "=" * 80)
         print("RAG SERVICE RESPONSE")
-        print("=" * 80)
 
         if response.success:
             print(f"\nAnswer:\n{response.answer}")
