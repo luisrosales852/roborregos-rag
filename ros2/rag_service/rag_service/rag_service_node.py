@@ -38,7 +38,7 @@ class RAGServiceNode(Node):
         self.declare_parameter('vector_db1_path', 'data/vector_dbs/chroma_knowledge1_db')
         self.declare_parameter('vector_db2_path', 'data/vector_dbs/chroma_knowledge2_db')
         self.declare_parameter('chunk_size', 400)
-        self.declare_parameter('chunk_overlap', 50)
+        self.declare_parameter('chunk_overlap', 100)
         self.declare_parameter('retrieval_k', 3)
 
         self.get_logger().info('Initializing RAG Service Node...')
@@ -75,11 +75,13 @@ class RAGServiceNode(Node):
 
             # Get environment variables
             self.redis_url = os.getenv("REDIS_URL", "redis://localhost:6379")
-            # OLLAMA CONFIGURATION (COMMENTED OUT - NOW USING CHATGPT/OPENAI)
+
+            # CHATGPT/OPENAI CONFIGURATION (ACTIVE)
+            self.openai_api_key = os.getenv("OPENAI_API_KEY")
+
             # self.ollama_base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
             # self.ollama_model = os.getenv("OLLAMA_MODEL", "llama3.1:8b")
-            # ChatGPT/OpenAI configuration
-            self.openai_api_key = os.getenv("OPENAI_API_KEY")
+
             self.get_logger().info(f'Redis URL: {self.redis_url}')
             # self.get_logger().info(f'Ollama Base URL: {self.ollama_base_url}')
             # self.get_logger().info(f'Ollama Model: {self.ollama_model}')
@@ -91,10 +93,10 @@ class RAGServiceNode(Node):
             from langchain.text_splitter import RecursiveCharacterTextSplitter
             from langchain_core.output_parsers import StrOutputParser
             from langchain_core.runnables import RunnablePassthrough, RunnableLambda
-            # OLLAMA IMPORTS (COMMENTED OUT)
-            # from langchain_ollama import ChatOllama, OllamaEmbeddings
-            # OPENAI IMPORTS
+            # OPENAI IMPORTS (ACTIVE)
             from langchain_openai import ChatOpenAI, OpenAIEmbeddings
+
+            # from langchain_ollama import ChatOllama, OllamaEmbeddings
             from langchain_chroma import Chroma
             from langchain_community.document_loaders import PyPDFLoader
             from langchain_text_splitters import CharacterTextSplitter
@@ -109,17 +111,12 @@ class RAGServiceNode(Node):
             from langchain.globals import set_llm_cache
             from langchain_community.cache import RedisCache
 
-            # Store imports as instance variables for later use
             self.modules = {
                 're': re,
                 'RecursiveCharacterTextSplitter': RecursiveCharacterTextSplitter,
                 'StrOutputParser': StrOutputParser,
                 'RunnablePassthrough': RunnablePassthrough,
                 'RunnableLambda': RunnableLambda,
-                # OLLAMA MODULES (COMMENTED OUT)
-                # 'ChatOllama': ChatOllama,
-                # 'OllamaEmbeddings': OllamaEmbeddings,
-                # OPENAI MODULES
                 'ChatOpenAI': ChatOpenAI,
                 'OpenAIEmbeddings': OpenAIEmbeddings,
                 'Chroma': Chroma,
@@ -167,21 +164,20 @@ class RAGServiceNode(Node):
             self.current_time = self.modules['datetime'].now().time()
             self.current_date = self.modules['date'].today()
 
-            # Initialize LLM with ChatGPT/OpenAI
-            # OLLAMA VERSION (COMMENTED OUT):
-            # self.llm = self.modules['ChatOllama'](
-            #     model=self.ollama_model,
-            #     base_url=self.ollama_base_url,
-            #     temperature=0
-            # )
-            # CHATGPT/OPENAI VERSION (ACTIVE):
+            # Initialize LLM with ChatGPT/OpenAI (ACTIVE)
             self.llm = self.modules['ChatOpenAI'](
                 model_name="gpt-4o-mini",
                 temperature=0
             )
 
+            # self.llm = self.modules['ChatOllama'](
+            #     model=self.ollama_model,  # gpt-oss:20b or llama3.1:8b
+            #     base_url=self.ollama_base_url,
+            #     temperature=0
+            # num_gpu=<layers> to limit GPU usage
+            # )
 
-            # Load PDF documents from package root
+
             pdf1_path = PACKAGE_ROOT / "data/pdfs/knowledge1.pdf"
             pdf2_path = PACKAGE_ROOT / "data/pdfs/knowledge2.pdf"
             self.get_logger().info(f'Loading PDF 1: {pdf1_path}')
@@ -192,19 +188,18 @@ class RAGServiceNode(Node):
             docs1 = loader1.load()
             docs2 = loader2.load()
 
-            # Initialize embeddings with ChatGPT/OpenAI
-            # OLLAMA VERSION (COMMENTED OUT):
-            # embeddings_ollama = self.modules['OllamaEmbeddings'](
-            #     model=self.ollama_model,
-            #     base_url=self.ollama_base_url
-            # )
-            # CHATGPT/OPENAI VERSION (ACTIVE):
             embeddings_openai = self.modules['OpenAIEmbeddings'](
                 model="text-embedding-3-large"
             )
             embeddings_openai = self.cache_manager.setup_cached_embeddings(embeddings_openai)
 
-            # Split documents
+   
+            # embeddings_ollama = self.modules['OllamaEmbeddings'](
+            #     model=self.ollama_model,  
+            #     base_url=self.ollama_base_url
+            # )
+            # embeddings_ollama = self.cache_manager.setup_cached_embeddings(embeddings_ollama)
+
             chunk_size = self.get_parameter('chunk_size').value
             chunk_overlap = self.get_parameter('chunk_overlap').value
 
@@ -226,27 +221,24 @@ class RAGServiceNode(Node):
             self.get_logger().info(f'Document 1 split into {len(splits1)} chunks')
             self.get_logger().info(f'Document 2 split into {len(splits2)} chunks')
 
-            # Initialize vector stores (paths relative to package root)
             vector_db1_path = self.get_parameter('vector_db1_path').value
             vector_db2_path = self.get_parameter('vector_db2_path').value
 
-            # Make paths absolute from package root
             vector_db1_path = str((PACKAGE_ROOT / vector_db1_path).resolve())
             vector_db2_path = str((PACKAGE_ROOT / vector_db2_path).resolve())
 
             self.vectorstore1 = self.modules['Chroma'](
                 collection_name="knowledge1_collection",
-                embedding_function=embeddings_openai,  # Changed from embeddings_ollama
+                embedding_function=embeddings_openai,  # Change to embeddings_ollama for Ollama
                 persist_directory=vector_db1_path
             )
 
             self.vectorstore2 = self.modules['Chroma'](
                 collection_name="knowledge2_collection",
-                embedding_function=embeddings_openai,  # Changed from embeddings_ollama
+                embedding_function=embeddings_openai,  # Change to embeddings_ollama for Ollama
                 persist_directory=vector_db2_path
             )
 
-            # Check if we need to populate vector stores
             if self.vectorstore1._collection.count() == 0:
                 from uuid import uuid4
                 uuids1 = [str(uuid4()) for _ in range(len(splits1))]
@@ -259,7 +251,6 @@ class RAGServiceNode(Node):
                 self.vectorstore2.add_documents(documents=splits2, ids=uuids2)
                 self.get_logger().info('Populated vector store 2')
 
-            # Create retrievers
             retrieval_k = self.get_parameter('retrieval_k').value
             self.retriever1 = self.vectorstore1.as_retriever(
                 search_kwargs={"k": retrieval_k}
@@ -268,7 +259,6 @@ class RAGServiceNode(Node):
                 search_kwargs={"k": retrieval_k}
             )
 
-            # Create BM25 retrievers
             self.bm25_retriever1 = self.modules['BM25Retriever'].from_documents(
                 splits1, k=retrieval_k
             )
@@ -276,7 +266,6 @@ class RAGServiceNode(Node):
                 splits2, k=retrieval_k
             )
 
-            # Initialize graders and prompts
             self._initialize_graders_and_prompts()
 
             self.get_logger().info('RAG system initialized successfully')
@@ -301,7 +290,8 @@ class RAGServiceNode(Node):
                 "1. 'El inmortal' o Luis Alvaro Rosales Salazar "
                 "2. Reflex, cemento, pegamento, o productos de construcción? "
                 "Si la pregunta menciona CUALQUIERA de estas palabras clave: inmortal, Luis, Alvaro, Rosales, Salazar, Reflex, cemento, pegamento, construcción, productos - responde 'si'. "
-                "IMPORTANTE: Si detectas las palabras 'inmortal', 'Luis', 'Reflex' o 'reflex' en la pregunta, SIEMPRE responde 'si'. "
+                "IMPORTANTE: Si detectas las palabras 'inmortal', 'Luis', 'Reflex' o 'reflex' en la pregunta, SIEMPRE responde 'si'. " \
+                "Tambien responde que si si es que piensas que el contexto de la pregunta va por el rumbo de esas palabras clave o tenga algo que ver."
                 "Solo responde 'no' si la pregunta es sobre matemáticas, conversación general, o temas completamente diferentes. "
                 "Responde SOLO 'si' o 'no'."
             )
@@ -389,7 +379,9 @@ Consulta optimizada para BM25:"""
 
         # Query Improvement for RAG Efficiency
         template_improvement = """Eres un experto en mejorar las preguntas para poder perform rag en esa pregunta, no pierdas el contexto ni las palabras clave 
-        pero si mejoralo si es necesario. Esta es la pregunta original:{question}
+        pero si mejoralo si es necesario. Esta es la pregunta original, no la modifiques mucho y si ves una palabra que piensas que es otra cosa no le muevas, lo ultimo que quiero
+         es que cambies el contexto de la pregunta, especialmente si ves la palabra inmortal no lo cambies y no insinues nada, es un personaje en una base
+         de datos vectorial. Tu existes para evitar principalmente errores de ortografia o de logica graves:{question}
 
 Devuelve la pregunta mejorada"""
 
@@ -442,25 +434,17 @@ Proporciona estas preguntas alternativas separadas por saltos de línea. Pregunt
         """Format documents for context."""
         return "\n\n".join([doc.page_content for doc in docs])
 
-    def _reciprocal_rank_fusion(self, results, k=60):
-        """Reciprocal rank fusion for combining multiple ranked document lists."""
-        fused_scores = {}
+    def _deduplicate_documents(self, results):
+        """Deduplicate documents from multiple retrieval sources (BM25 and vector search)."""
+        seen_docs = {}
 
-        for id_list, docs in enumerate(results):
-            for rank, doc in enumerate(docs):
+        for docs in results:
+            for doc in docs:
                 doc_str = self.modules['dumps'](doc)
-                score_docs = 1/(rank+k)
-                if doc_str not in fused_scores:
-                    fused_scores[doc_str] = 0
-                fused_scores[doc_str] += score_docs
+                if doc_str not in seen_docs:
+                    seen_docs[doc_str] = doc
 
-        reranked_results = [
-            (self.modules['loads'](doc), score)
-            for doc, score in sorted(fused_scores.items(), key=lambda x: x[1], reverse=True)
-        ]
-
-
-        return reranked_results
+        return list(seen_docs.values())
 
     def _grade_docs_final(self, docs, question):
         """Grade and filter documents using LLM structured output."""
@@ -516,14 +500,13 @@ Proporciona estas preguntas alternativas separadas por saltos de línea. Pregunt
         vector_docs = [doc for doc_list in vector_docs for doc in doc_list]
         self.get_logger().info(f'Vector search retrieved {len(vector_docs)} documents')
 
-        # STEP 4: Combine both sets of documents using RRF
+        # STEP 4: Deduplicate documents from both retrieval methods
         self.get_logger().info(f'BM25 docs: {len(bm25_docs)}, Vector docs: {len(vector_docs)}')
         combined_docs = [bm25_docs, vector_docs]
-        scored_docs = self._reciprocal_rank_fusion(combined_docs)
-        self.get_logger().info(f'After RRF fusion: {len(scored_docs)} unique documents')
+        all_docs = self._deduplicate_documents(combined_docs)
+        self.get_logger().info(f'After deduplication: {len(all_docs)} unique documents')
 
         # STEP 5: Grade documents using the improved question
-        all_docs = [doc for doc, score in scored_docs]
         self.get_logger().info(f'Grading {len(all_docs)} documents...')
         filtered_docs = self._grade_docs_final(all_docs, question)
         self.get_logger().info(f'After grading: {len(filtered_docs)} relevant documents')

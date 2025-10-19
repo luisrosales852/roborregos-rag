@@ -18,7 +18,9 @@ services:
     networks:
       - rag_network
 
-  # Ollama service for local LLM (COMMENTED OUT - NOW USING CHATGPT/OPENAI)
+  # Ollama service for local LLM with GPU acceleration (COMMENTED OUT - NOW USING CHATGPT/OPENAI)
+  # Uncomment to use Ollama with llama3.1:8b + gemma2:300m
+  # GPU auto-detected: NVIDIA (CUDA), AMD (ROCm), Apple (Metal)
   # ollama:
   #   image: ollama/ollama:latest
   #   container_name: rag_ollama
@@ -28,12 +30,29 @@ services:
   #     - ollama_data:/root/.ollama
   #   networks:
   #     - rag_network
+  #   # GPU Configuration (for NVIDIA GPUs with docker-compose)
+  #   deploy:
+  #     resources:
+  #       reservations:
+  #         devices:
+  #           - driver: nvidia
+  #             count: all
+  #             capabilities: [gpu]
+  #   # For AMD GPUs: use 'device: /dev/kfd' and 'device: /dev/dri'
+  #   # For Apple Silicon: GPU (Metal) is used automatically, no config needed
   #   healthcheck:
   #     test: ["CMD", "ollama", "list"]
   #     interval: 10s
   #     timeout: 5s
   #     retries: 5
   #     start_period: 10s
+  #   # Pull models on container start
+  #   command: >
+  #     sh -c "ollama serve &
+  #            sleep 5 &&
+  #            ollama pull llama3.1:8b &&
+  #            ollama pull gemma2:300m &&
+  #            wait"
 
   # ROS2 RAG Service
   rag_service:
@@ -48,8 +67,10 @@ services:
       #   condition: service_healthy
     environment:
       # OLLAMA CONFIGURATION (COMMENTED OUT - NOW USING CHATGPT/OPENAI)
+      # Uncomment for llama3.1:8b + gemma2:300m with GPU
       # - OLLAMA_BASE_URL=http://ollama:11434
       # - OLLAMA_MODEL=${OLLAMA_MODEL:-llama3.1:8b}
+      # - OLLAMA_EMBEDDING_MODEL=${OLLAMA_EMBEDDING_MODEL:-gemma2:300m}
       - OPENAI_API_KEY=${OPENAI_API_KEY}  # ChatGPT/OpenAI API Key
       - REDIS_URL=redis://redis:6379
       - ROS_DOMAIN_ID=${ROS_DOMAIN_ID:-0}
@@ -88,7 +109,8 @@ volumes:
     driver: local
   vector_dbs:
     driver: local
-  # ollama_data:  # COMMENTED OUT - NOW USING CHATGPT/OPENAI
+  # Uncomment for Ollama (stores models: llama3.1:8b ~5GB, gemma2:300m ~500MB)
+  # ollama_data:
   #   driver: local
 
 networks:

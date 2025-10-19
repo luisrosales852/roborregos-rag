@@ -54,7 +54,7 @@ def generate_launch_description():
 
     chunk_overlap_arg = DeclareLaunchArgument(
         'chunk_overlap',
-        default_value='50',
+        default_value='100',
         description='Chunk overlap for text splitting'
     )
 

@@ -108,11 +108,9 @@ def hybrid_retrieval(query_input, vector_store_choice):
     vector_docs = retrieval_chain.invoke(query_input)
     vector_docs = [doc for doc_list in vector_docs for doc in doc_list]
     
-    # Combine both sets of documents
+    # Deduplicate documents from both retrieval methods
     combined_docs = [bm25_docs, vector_docs]
-    scored_docs = reciprocal_rank_fusion(combined_docs)
-
-    all_docs = [doc for doc, score in scored_docs]
+    all_docs = deduplicate_documents(combined_docs)
 
     filtered_docs = gradeDocsFinal(all_docs)
     
@@ -134,49 +132,17 @@ def create_rag_response(question, vector_store_choice):
 
     return final_rag_chain.invoke({"question": question})
 
-#Function to rank selection. Update pls. May not be needed but we will see. Hmmmm.
-def reciprocal_rank_fusion(results: list[list], k=60):
-    """ Reciprocal_rank_fusion that takes multiple lists of ranked documents 
-        and an optional parameter k used in the RRF formula """
-    
-    # Initialize a dictionary to hold fused scores for each unique document
-    fused_scores = {}
+def deduplicate_documents(results):
+    """Deduplicate documents from multiple retrieval sources (BM25 and vector search)."""
+    seen_docs = {}
 
-    bm25_scores = []
-    vector_scores = []
-
-
-    # Iterate through each list of ranked documents
-    for id_list, docs in enumerate(results):
-        # Iterate through each document in the list, with its rank (position in the list)
-        for rank, doc in enumerate(docs):
-            # Convert the document to a string format to use as a key (assumes documents can be serialized to JSON)
+    for docs in results:
+        for doc in docs:
             doc_str = dumps(doc)
-            score_docs = 1/(rank+k)
-            # If the document is not yet in the fused_scores dictionary, add it with an initial score of 0
-            if doc_str not in fused_scores:
-                fused_scores[doc_str] = 0
-            # Retrieve the current score of the document, if any
-            # Update the score of the document using the RRF formula: 1 / (rank + k)
-            fused_scores[doc_str] += score_docs
-            if id_list == 0:
-                bm25_scores.append(score_docs)
-            else:
-                vector_scores.append(score_docs)
+            if doc_str not in seen_docs:
+                seen_docs[doc_str] = doc
 
-    if bm25_scores:
-        print(f"Average BM25 RRF Score: {sum(bm25_scores)/len(bm25_scores):.6f}")
-    if vector_scores:
-        print(f"Average Vector RRF Score: {sum(vector_scores)/len(vector_scores):.6f}")
-
-    # Sort the documents based on their fused scores in descending order to get the final reranked results
-    reranked_results = [
-        (loads(doc), score)
-        for doc, score in sorted(fused_scores.items(), key=lambda x: x[1], reverse=True)
-    ]
-
-    # Return the reranked results as a list of tuples, each containing the document and its fused score
-    return reranked_results
+    return list(seen_docs.values())
 
 
 def clean_pdf_text(text):

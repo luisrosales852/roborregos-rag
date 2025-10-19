@@ -7,11 +7,6 @@ import sys
 
 
 class RAGClientExample(Node):
-    """
-    Example ROS2 client node for the RAG service.
-
-    This node demonstrates how to call the RAG service and handle responses.
-    """
 
     def __init__(self):
         """Initialize the RAG client node."""
@@ -27,15 +22,6 @@ class RAGClientExample(Node):
         self.get_logger().info('RAG service available')
 
     def send_query(self, question):
-        """
-        Send a query to the RAG service.
-
-        Args:
-            question (str): The question to ask
-
-        Returns:
-            RAGQuery.Response: The service response
-        """
         # Create the request
         request = RAGQuery.Request()
         request.question = question
@@ -55,12 +41,6 @@ class RAGClientExample(Node):
             return None
 
     def print_response(self, response):
-        """
-        Print the service response in a readable format.
-
-        Args:
-            response (RAGQuery.Response): The service response
-        """
         print("\n" + "=" * 80)
         print("RAG SERVICE RESPONSE")
         print("=" * 80)
@@ -90,11 +70,11 @@ def main(args=None):
             question = ' '.join(sys.argv[1:])
         else:
             # Interactive mode - ask for questions
-            print("\n" + "=" * 80)
-            print("RAG SERVICE CLIENT - INTERACTIVE MODE")
-            print("=" * 80)
+            print("\n" )
+            print("RAG SERVICE CLIENT")
+            print("\n")
             print("Enter your questions (or 'quit' to exit)")
-            print("=" * 80 + "\n")
+            print("\n")
 
             while True:
                 try:
