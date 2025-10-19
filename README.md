@@ -1,6 +1,8 @@
 #Roborregos Rag project Inmortal and Reflex
 
-Hi, this is my rag project for submission to the roborregos team. Ill explain here a little bit about the project and how to run it.
+Hi, this is my rag project for submission to the roborregos team. Im using 2 vector databases here, one with information about the catalogue of a construction company
+and the other with information about how I met my friend "El inmortal" and information about our and his adventures.
+Ill explain here a little bit about the project and how to run it.
 
 This RAG system implements
 - Query Translation with step back prompting and CRAG
@@ -20,9 +22,9 @@ For ROS 2 implementation and what this project is all about this is how to run i
 - Add a .env file one folder below the ROS 2 folder, so on the same folder level as rag_service. It must have REDIS_URL= redis://localhost:6379 and the OPEN_AI_APIKEY
 
 Now docker commands
-Navigate to ros2 folder using cd
-Run this: docker compose build
-Run this: docker-compose up
-Run this: docker exec -it rag_service_node /ros2_entrypoint.sh bash (This is to get into the entry point)
-Run this: ros2 run rag_service rag_client
+- Navigate to ros2 folder using cd
+- Run this: docker compose build
+- Run this: docker-compose up
+- Run this: docker exec -it rag_service_node /ros2_entrypoint.sh bash (This is to get into the entry point)
+- Run this: ros2 run rag_service rag_client
 
