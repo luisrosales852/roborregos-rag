@@ -7,7 +7,6 @@ import sys
 import os
 import time
 from pathlib import Path
-import redis
 
 
 
@@ -20,13 +19,6 @@ else:
 
 
 class RAGServiceNode(Node):
-    """
-    ROS2 Node that provides RAG query service.
-
-    This node initializes the RAG system from the langchain module and provides
-    a service interface for querying the system. It handles both cached and
-    non-cached queries, tracks response times, and provides error handling.
-    """
 
     def __init__(self):
         """Initialize the RAG service node and set up the RAG system."""
@@ -108,8 +100,6 @@ class RAGServiceNode(Node):
             from datetime import datetime, date
             from pydantic import BaseModel, Field
             from rag_service.caching import RAGCacheManager  # Import from package caching.py
-            from langchain.globals import set_llm_cache
-            from langchain_community.cache import RedisCache
 
             self.modules = {
                 're': re,
@@ -132,9 +122,7 @@ class RAGServiceNode(Node):
                 'date': date,
                 'BaseModel': BaseModel,
                 'Field': Field,
-                'RAGCacheManager': RAGCacheManager,
-                'set_llm_cache': set_llm_cache,
-                'RedisCache': RedisCache
+                'RAGCacheManager': RAGCacheManager
             }
 
             self.get_logger().info('Successfully imported RAG components')
@@ -146,13 +134,6 @@ class RAGServiceNode(Node):
     def _initialize_rag_system(self):
         """Initialize the RAG system with all necessary components."""
         try:
-            redis_client = redis.Redis.from_url(self.redis_url, decode_responses=True)
-            # Set up LLM cache
-
-            self.modules['set_llm_cache'](
-                self.modules['RedisCache'](redis_=redis_client)
-            )
-
             # Initialize cache manager
             self.cache_manager = self.modules['RAGCacheManager'](
                 redis_url=self.redis_url,
@@ -615,16 +596,6 @@ Proporciona estas preguntas alternativas separadas por saltos de línea. Pregunt
         return answer, False
 
     def handle_rag_query(self, request, response):
-        """
-        Handle incoming RAG query requests.
-
-        Args:
-            request: RAGQuery service request containing the question
-            response: RAGQuery service response to be filled
-
-        Returns:
-            response: Filled service response
-        """
         start_time = time.time()
 
         self.get_logger().info(f'Received query: {request.question}')
@@ -661,7 +632,6 @@ Proporciona estas preguntas alternativas separadas por saltos de línea. Pregunt
 
 
 def main(args=None):
-    """Main entry point for the RAG service node."""
     rclpy.init(args=args)
 
     try:
