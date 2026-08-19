@@ -7,7 +7,6 @@ REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
 
 import re
 import redis
-from langchain import hub
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.runnables import RunnablePassthrough, RunnableLambda
@@ -26,21 +25,57 @@ from caching import RAGCacheManager
 from langchain.globals import set_llm_cache
 from langchain_community.cache import RedisCache
 
+class _NullCacheManager:
+    """Fallback used when Redis is unreachable (e.g. Cloud Run without Memorystore).
+
+    The RAG pipeline works fine without caching, it just costs more per query.
+    """
+
+    def setup_cached_embeddings(self, base_embeddings):
+        return base_embeddings
+
+    def get_cached_answer(self, question):
+        return None
+
+    def cache_qa_pair(self, question, answer):
+        pass
+
+
 #Setting llm cache?
-redis_client = redis.Redis.from_url(REDIS_URL, decode_responses=True)
-set_llm_cache(RedisCache(redis_=redis_client))
-
-
-#Definir static fact and dynamic fact
-cache_manager = RAGCacheManager(redis_url=REDIS_URL, cache_prefix="rag_cache", max_qa_pairs=10000)
+# Setting REDIS_URL to an empty string explicitly disables caching, which is how
+# this runs on Cloud Run (managed Redis has no free tier).
+if REDIS_URL:
+    try:
+        # Short timeouts matter on Cloud Run: an unreachable-but-routable Redis
+        # host would otherwise hang startup until the deploy times out.
+        redis_client = redis.Redis.from_url(
+            REDIS_URL,
+            decode_responses=True,
+            socket_connect_timeout=3,
+            socket_timeout=3,
+        )
+        redis_client.ping()
+        set_llm_cache(RedisCache(redis_=redis_client))
+        #Definir static fact and dynamic fact
+        cache_manager = RAGCacheManager(redis_url=REDIS_URL, cache_prefix="rag_cache", max_qa_pairs=10000)
+    except (redis.ConnectionError, redis.TimeoutError, ValueError, OSError) as exc:
+        print(f"Redis unavailable ({exc}) - running without cache")
+        redis_client = None
+        cache_manager = _NullCacheManager()
+else:
+    print("REDIS_URL empty - running without cache")
+    redis_client = None
+    cache_manager = _NullCacheManager()
 
 def handle_static_skills(question):
     """Handle questions that require static skills - provide all available info"""
     
     # Provide all static information available
+    # Computed per call: in a long-running server, import-time values would be frozen
+    # at container start and "what time is it" would answer with a stale clock.
     context = f"""Available static information:
-    Current time: {current_time}
-    Current date: {current_date}"""
+    Current time: {datetime.now().time()}
+    Current date: {date.today()}"""
     
     static_prompt = ChatPromptTemplate.from_template(
         """Answer the user's question using the provided information.
@@ -116,9 +151,10 @@ def hybrid_retrieval(query_input, vector_store_choice):
     print(f"These is the better bm25 query: {bm25_query}")
     bm25_docs = bm25_retriever.invoke(bm25_query)
 
-    print("This is the first bm25 docs")
-    print(bm25_docs[0])
-    
+    if bm25_docs:
+        print("This is the first bm25 docs")
+        print(bm25_docs[0])
+
     # Get vector search results
     retrieval_chain = generate_queries | debug_queries | retriever.map()
     vector_docs = retrieval_chain.invoke(query_input)
@@ -128,8 +164,8 @@ def hybrid_retrieval(query_input, vector_store_choice):
     combined_docs = [bm25_docs, vector_docs]
     all_docs = deduplicate_documents(combined_docs)
 
-    filtered_docs = gradeDocsFinal(all_docs)
-    
+    filtered_docs = gradeDocsFinal(all_docs, question)
+
     # Use your existing function to get unique documents
     return filtered_docs
 
@@ -240,11 +276,16 @@ print(f"Document 2 split into {len(splits2)} chunks")
 
 uuids1 = [str(uuid4()) for _ in range(len(splits1))]
 uuids2 = [str(uuid4()) for _ in range(len(splits2))]
-existing_vectorstore = os.path.exists("./chroma_knowledge1_db")
-existing_vectorstore2 = os.path.exists("./chroma_knowledge2_db")
+# Overridable so the Docker image can point at the vector stores baked into it.
+# Defaults keep the original local behaviour (relative to the current directory).
+chroma_db1_path = os.getenv("CHROMA_DB1_PATH", "./chroma_knowledge1_db")
+chroma_db2_path = os.getenv("CHROMA_DB2_PATH", "./chroma_knowledge2_db")
 
-vectorstore1 = Chroma(collection_name="knowledge1_collection",embedding_function=embeddings_openai, persist_directory="./chroma_knowledge1_db")
-vectorstore2 = Chroma(collection_name="knowledge2_collection", embedding_function=embeddings_openai, persist_directory="./chroma_knowledge2_db")
+existing_vectorstore = os.path.exists(chroma_db1_path)
+existing_vectorstore2 = os.path.exists(chroma_db2_path)
+
+vectorstore1 = Chroma(collection_name="knowledge1_collection",embedding_function=embeddings_openai, persist_directory=chroma_db1_path)
+vectorstore2 = Chroma(collection_name="knowledge2_collection", embedding_function=embeddings_openai, persist_directory=chroma_db2_path)
 
 if(existing_vectorstore == False):
     vectorstore1.add_documents(documents=splits1, ids=uuids1)
@@ -257,8 +298,6 @@ if(existing_vectorstore2 == False):
 
 retriever1 = vectorstore1.as_retriever(search_kwargs={"k": 3})
 retriever2 = vectorstore2.as_retriever(search_kwargs={"k": 3})
-
-question = input("Whats your question?: ")
 
 # LLM and states
 
@@ -305,7 +344,7 @@ class VectorStoreDistinction(BaseModel):
 
 # More functions?.
 
-def grade_documents(docs):
+def grade_documents(docs, question):
     """
     Determines whether the retrieved documents are relevant to the question.
 
@@ -379,14 +418,14 @@ vectorDistPrompt = ChatPromptTemplate.from_messages([
 
 vector_store_grader = vectorDistPrompt | structured_llm_vector
 
-def gradeDocsFinal(docs):
+def gradeDocsFinal(docs, question):
     """Grade and filter documents using LLM structured output"""
     print("---FILTERING DOCUMENTS WITH LLM GRADER---")
     filtered_docs = []
-    
+
     for doc in docs:
         score = retrieval_grader.invoke({
-            "question": question, 
+            "question": question,
             "document": doc.page_content
         })
         
@@ -450,5 +489,10 @@ Pregunta: {question}
 
 prompt = ChatPromptTemplate.from_template(template)
 
-answer = routeQuestion(question)
-print(answer)
+
+# Guarded so serve.py can import this module (which builds the whole pipeline once
+# at startup) without being blocked on stdin. Running `python main.py` is unchanged.
+if __name__ == "__main__":
+    question = input("Whats your question?: ")
+    answer = routeQuestion(question)
+    print(answer)

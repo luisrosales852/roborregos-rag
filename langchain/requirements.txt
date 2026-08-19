@@ -1,13 +1,19 @@
 # Core LangChain dependencies
-langchain>=0.1.0
-langchain-core>=0.1.0
-langchain-openai>=0.0.5
-langchain-community>=0.0.20
-langchain-chroma>=0.1.0
-langchain-text-splitters>=0.0.1
+# Capped below 1.0: langchain 1.x removed langchain.text_splitter, langchain.prompts,
+# langchain.load, langchain.globals and langchain.embeddings.CacheBackedEmbeddings,
+# all of which this project imports. Without these caps a fresh install pulls
+# langchain 1.x and the app fails at import.
+langchain>=0.3.0,<1.0.0
+langchain-core>=0.3.0,<1.0.0
+langchain-openai>=0.2.0,<1.0.0
+langchain-community>=0.3.0,<1.0.0
+langchain-chroma>=0.2.0,<1.0.0
+langchain-text-splitters>=0.3.0,<1.0.0
 
 # Vector store and embeddings
-chromadb>=0.4.22
+# 1.x floor: the committed chroma_knowledge*_db stores use the 1.x sqlite schema
+# and an older chromadb cannot open them.
+chromadb>=1.0.0
 
 # Document loaders
 pypdf>=3.17.0
@@ -21,3 +27,10 @@ pydantic>=2.0.0
 
 # Ranking and retrieval
 rank-bm25>=0.2.2
+
+# HTTP server (serve.py / Cloud Run)
+fastapi>=0.110.0
+uvicorn>=0.29.0
+
+# Tokenizer used by the OpenAI integrations
+tiktoken>=0.6.0

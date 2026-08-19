@@ -1,0 +1,18 @@
+# Keep the build context small and free of secrets.
+.git
+.gitignore
+.vscode
+**/__pycache__
+**/*.pyc
+
+# Secrets never belong in an image layer; the key arrives via Secret Manager.
+**/.env
+*.env
+
+# The ROS 2 side has its own Dockerfile and is not part of the Cloud Run image.
+ros2/
+langchain/docker/
+langchain/test.py
+
+*.md
+notes.txt

@@ -1,3 +1,4 @@
 *.env
 *.gitignore
 Documentation.txt
+DEPLOY.md
